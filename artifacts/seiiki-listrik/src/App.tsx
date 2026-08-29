@@ -6,7 +6,7 @@ import {
   CalendarDays, Check, ChevronDown, ClipboardCheck, Clock3, FileText, Headphones,
   LayoutDashboard, LocateFixed, LogIn, MapPin, Menu, MessageCircle, PackageCheck, Paperclip,
   Pencil, Plus, Radio, ReceiptText, RefreshCw, Search, Send, Settings2, ShieldCheck,
-  Smartphone, Sparkles, Tag, Trash2, UserRound, UsersRound, Wrench, X, Zap
+  Smartphone, Sparkles, Tag, Trash2, UserRound, UsersRound, Wrench, X
 } from 'lucide-react';
 import {
   getGetDashboardSummaryQueryKey, getListEquipmentRequestsQueryKey, getListServiceRequestsQueryKey,
@@ -35,9 +35,8 @@ function Badge({ children, tone = 'neutral' }: { children: React.ReactNode; tone
   return <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold tracking-wide badge-${tone}`} data-testid="status-badge">{children}</span>;
 }
 function Logo({ inverse = false }: { inverse?: boolean }) {
-  return <Link href="/" className={`flex items-center gap-2.5 ${inverse ? 'text-sidebar-foreground' : 'text-foreground'}`} data-testid="link-logo">
-    <span className={`grid size-9 place-items-center rounded-xl ${inverse ? 'bg-primary text-primary-foreground' : 'bg-foreground text-primary'}`}><Zap size={18} strokeWidth={2.5} /></span>
-    <span><strong className="block text-[17px] font-extrabold tracking-[-.04em]">SEIIKI</strong><small className={`block text-[9px] font-bold uppercase tracking-[.18em] ${inverse ? 'text-sidebar-foreground/55' : 'text-muted-foreground'}`}>solusi energi</small></span>
+  return <Link href="/" className={`brand-logo-link ${inverse ? 'text-sidebar-foreground' : 'text-foreground'}`} data-testid="link-logo">
+    <span className={`brand-logo-frame ${inverse ? 'brand-logo-frame-inverse' : ''}`}><img className="brand-logo" src={`${basePath}/brand-logo.png`} alt="SEIIKI — Solusi Energi Kelistrikan Indonesia" /></span>
   </Link>;
 }
 function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {

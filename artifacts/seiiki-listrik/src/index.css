@@ -445,6 +445,36 @@ button:disabled {
   padding-block: 16px;
 }
 
+.brand-logo-link {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.brand-logo-frame {
+  display: flex;
+  width: 138px;
+  height: 72px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.brand-logo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.brand-logo-frame-inverse {
+  width: 184px;
+  height: 82px;
+  border-radius: 14px;
+  padding: 4px 8px;
+  background: #fff;
+}
+
 .customer-hero {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(360px, 0.95fr);
@@ -1539,6 +1569,11 @@ td:last-child {
 
   .customer-nav {
     min-height: 66px;
+  }
+
+  .customer-nav .brand-logo-frame {
+    width: 118px;
+    height: 62px;
   }
 
   .hero-copy h1 {
