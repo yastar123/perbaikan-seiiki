@@ -13,7 +13,6 @@ Platform layanan perbaikan dan instalasi listrik untuk pelanggan, admin operasi,
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - Required env for the API: `DATABASE_URL` — Postgres connection string
-- Optional env for dashboard auth: `CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`, and frontend `VITE_CLERK_PUBLISHABLE_KEY`; without Clerk, the customer landing page remains public while dashboard routes stay unavailable
 - In Replit, use the `SEIIKI API` and `SEIIKI Web` workflows so the proxy routes `/api` and `/` correctly.
 
 ## Stack
@@ -38,14 +37,13 @@ Platform layanan perbaikan dan instalasi listrik untuk pelanggan, admin operasi,
 - Visit payment is intentionally simulated and fixed at Rp25.000 until a real payment provider is connected.
 - Customer location is captured as latitude/longitude and linked to Google Maps for dispatch.
 - The API uses the shared `/api` proxy path; the frontend uses relative API URLs so preview and deployment share the same routing.
-- Dashboard role switching is a demo access flow; production authentication should be connected before launch.
-- The public fallback is intentionally fail-closed: missing Clerk never grants dashboard access and returns a configuration message instead.
+- Dashboard role switching is a demo access flow without account authentication.
 
 ## Public launch checklist
 
 - Run `pnpm run build` to validate all workspace packages.
 - Confirm the `SEIIKI API` and `SEIIKI Web` workflows are running.
-- Connect Clerk and set admin/worker `publicMetadata.role` values before enabling dashboard operations.
+- Add an authentication layer before using the admin and worker dashboards with real operational data.
 - Publish from Replit; the web artifact is served from `artifacts/seiiki-listrik/dist/public`, while the API uses the production server defined in its artifact manifest.
 
 ## Product

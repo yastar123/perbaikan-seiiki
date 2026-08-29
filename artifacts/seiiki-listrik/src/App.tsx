@@ -1,9 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
-import { Link, Redirect, Route, Router as WouterRouter, Switch, useLocation } from 'wouter';
-import { ClerkProvider, SignIn, SignUp, useAuth, useClerk, useUser } from '@clerk/react';
-import { publishableKeyFromHost } from '@clerk/react/internal';
-import { shadcn } from '@clerk/themes';
+import { Link, Route, Router as WouterRouter, Switch, useLocation } from 'wouter';
 import {
   Activity, ArrowRight, BadgeCheck, Banknote, BarChart3, Bell, Boxes, BriefcaseBusiness,
   CalendarDays, Check, ChevronDown, ClipboardCheck, Clock3, FileText, Headphones,
@@ -26,48 +23,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 const queryClient = new QueryClient();
-const clerkPubKey = publishableKeyFromHost(
-  window.location.hostname,
-  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
-);
-const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
-const clerkAppearance = {
-  theme: shadcn,
-  cssLayerName: 'clerk',
-  options: {
-    logoPlacement: 'inside' as const,
-    logoLinkUrl: basePath || '/',
-    logoImageUrl: `${window.location.origin}${basePath}/logo.svg`,
-  },
-  variables: {
-    colorPrimary: '#eab308',
-    colorForeground: '#17313a',
-    colorMutedForeground: '#60737a',
-    colorDanger: '#c2410c',
-    colorBackground: '#fffdf8',
-    colorInput: '#fffdf8',
-    colorInputForeground: '#17313a',
-    colorNeutral: '#d9d5ca',
-    fontFamily: 'Manrope, ui-sans-serif, sans-serif',
-    borderRadius: '0.75rem',
-  },
-  elements: {
-    rootBox: 'w-full flex justify-center',
-    cardBox: 'bg-[#fffdf8] rounded-2xl w-[440px] max-w-full overflow-hidden',
-    card: '!shadow-none !border-0 !bg-transparent !rounded-none',
-    footer: '!shadow-none !border-0 !bg-transparent !rounded-none',
-    headerTitle: 'text-[#17313a]',
-    headerSubtitle: 'text-[#60737a]',
-    socialButtonsBlockButtonText: 'text-[#17313a]',
-    formFieldLabel: 'text-[#17313a]',
-    footerActionLink: 'text-[#c2410c]',
-    footerActionText: 'text-[#60737a]',
-    dividerText: 'text-[#60737a]',
-    formButtonPrimary: 'bg-[#eab308] text-[#17313a] hover:bg-[#facc15]',
-    formFieldInput: 'border-[#d9d5ca] text-[#17313a]',
-  },
-};
 const rupiah = (n = 0) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n);
 const date = (value: string) => new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(value));
 const time = (value: string) => new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
@@ -113,9 +69,8 @@ const workerNav = [
 function AppShell({ children, role = 'admin' }: { children: React.ReactNode; role?: 'admin' | 'worker' }) {
   const [menu, setMenu] = useState(false);
   const [location] = useLocation();
-  const { user } = useUser();
   const nav = role === 'admin' ? adminNav : workerNav;
-  const displayName = user?.fullName || user?.primaryEmailAddress?.emailAddress || (role === 'admin' ? 'Admin SEIIKI' : 'Pekerja lapangan');
+  const displayName = role === 'admin' ? 'Admin SEIIKI' : 'Pekerja lapangan';
   const initials = displayName.split(/\s+/).map((value) => value[0]).join('').slice(0, 2).toUpperCase();
   return <div className="app-noise min-h-[100dvh] bg-background">
     <aside className={`sidebar ${menu ? 'sidebar-open' : ''}`}>
@@ -124,7 +79,7 @@ function AppShell({ children, role = 'admin' }: { children: React.ReactNode; rol
       <nav className="mt-3 space-y-1">{nav.map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={() => setMenu(false)} className={`side-link ${location === href ? 'side-link-active' : ''}`} data-testid={`link-${label.toLowerCase().replaceAll(' ', '-')}`}><Icon size={17} /><span>{label}</span>{href === '/admin/requests' && <span className="ml-auto grid size-5 place-items-center rounded-full bg-primary text-[10px] font-extrabold text-primary-foreground">4</span>}</Link>)}</nav>
       <div className="sidebar-bottom">
         <div className="rounded-2xl border border-sidebar-border bg-sidebar-accent/60 p-4"><div className="mb-2 flex items-center gap-2 text-primary"><Radio size={14} /><span className="text-[11px] font-bold uppercase tracking-widest">Tim aktif</span></div><p className="text-xs leading-5 text-sidebar-foreground/70">Semua layanan lapangan terpantau.</p><div className="mt-3 flex items-center gap-2 text-xs text-sidebar-foreground/50"><span className="status-dot bg-emerald-400" /> Sistem normal</div></div>
-        <Link href="/login" className="side-link mt-3 text-sidebar-foreground/55" data-testid="link-switch-role"><LogIn size={17} /><span>Ganti akses demo</span></Link>
+        <Link href={role === 'admin' ? '/worker' : '/admin'} className="side-link mt-3 text-sidebar-foreground/55" data-testid="link-switch-role"><LogIn size={17} /><span>{role === 'admin' ? 'Buka ruang pekerja' : 'Buka ruang admin'}</span></Link>
       </div>
     </aside>
     <main className="md:pl-[264px]">
@@ -179,78 +134,12 @@ function CustomerHome() {
   };
   const geoLabel = geoState === 'loading' ? 'Mencari lokasi…' : geoState === 'ready' ? 'Lokasi GPS tersimpan' : geoState === 'error' ? 'Lokasi belum tersedia — coba lagi' : 'Ambil lokasi GPS';
   return <div className="customer-page app-noise min-h-[100dvh]">
-    <header className="customer-nav"><Logo /><div className="hidden items-center gap-7 text-xs font-bold text-muted-foreground md:flex"><a href="#alur" data-testid="link-customer-flow">Cara kerja</a><a href="#aman" data-testid="link-customer-safety">Jaminan kami</a><Link href="/login" className="text-foreground" data-testid="link-customer-login">Akses tim <ArrowRight size={13} className="ml-1 inline" /></Link></div><Link href="/login" className="btn btn-outline !px-3 !py-2 text-xs md:hidden" data-testid="link-mobile-login">Masuk</Link></header>
+     <header className="customer-nav"><Logo /><div className="hidden items-center gap-7 text-xs font-bold text-muted-foreground md:flex"><a href="#alur" data-testid="link-customer-flow">Cara kerja</a><a href="#aman" data-testid="link-customer-safety">Jaminan kami</a><Link href="/admin" className="text-foreground" data-testid="link-customer-dashboard">Akses tim <ArrowRight size={13} className="ml-1 inline" /></Link></div><Link href="/admin" className="btn btn-outline !px-3 !py-2 text-xs md:hidden" data-testid="link-mobile-dashboard">Akses tim</Link></header>
     <section className="customer-hero"><div className="hero-copy rise-in"><div className="eyebrow"><span className="status-dot bg-accent" /> Layanan listrik yang datang siap kerja</div><h1>Masalah listrik,<br /><em>kami urus.</em></h1><p>Teknisi terverifikasi datang ke lokasi Anda dengan alur yang jelas, biaya kunjungan pasti, dan admin yang selalu bisa dihubungi.</p><div className="hero-proof"><span><ShieldCheck size={17} /> Teknisi terverifikasi</span><span><Clock3 size={17} /> Respon di hari yang sama</span></div></div><div className="request-card rise-in delay-1"><div className="card-kicker"><span className="step-number">01</span><div><strong>Ajukan kunjungan</strong><p>Isi detail singkat, kami lanjutkan lewat WhatsApp.</p></div></div>{!submitted ? <form onSubmit={submit} className="space-y-4"><Field label="Nama lengkap"><input required minLength={2} value={form.customerName} onChange={(e) => set('customerName', e.target.value)} placeholder="Contoh: Sinta Rahma" data-testid="input-customer-name" /></Field><Field label="Nomor WhatsApp" hint="Gunakan nomor yang aktif menerima pesan"><input required minLength={8} value={form.whatsapp} onChange={(e) => set('whatsapp', e.target.value)} placeholder="08xx xxxx xxxx" data-testid="input-customer-whatsapp" /></Field><Field label="Alamat lokasi"><textarea required minLength={4} value={form.address} onChange={(e) => set('address', e.target.value)} placeholder="Alamat lengkap, patokan, dan lantai bila ada" data-testid="input-customer-address" /></Field><Field label="Titik lokasi GPS" hint="Bagikan lokasi agar teknisi menemukan alamat dengan tepat"><div className="location-control"><Button type="button" kind={geoState === 'ready' ? 'soft' : 'outline'} onClick={() => locate()} disabled={geoState === 'loading'} data-testid="button-get-location"><LocateFixed size={15} /> {geoLabel}</Button>{coords && <a href={`https://www.google.com/maps?q=${coords.latitude},${coords.longitude}`} target="_blank" rel="noreferrer" className="location-coordinates" data-testid="link-location-map">{coords.latitude.toFixed(5)}, {coords.longitude.toFixed(5)}</a>}</div></Field><Field label="Kebutuhan layanan"><select value={form.serviceType} onChange={(e) => set('serviceType', e.target.value)} data-testid="select-service-type"><option>Perbaikan listrik rumah</option><option>Instalasi titik listrik</option><option>Pemeriksaan instalasi</option><option>Perbaikan panel / MCB</option></select></Field><Field label="Catatan tambahan" hint="Opsional"><input value={form.notes} onChange={(e) => set('notes', e.target.value)} placeholder="Keluhan, waktu yang diinginkan..." data-testid="input-customer-notes" /></Field>{geoState === 'error' && <div className="notice notice-error"><MapPin size={15} /> Izinkan akses lokasi di browser untuk mengirim permintaan.</div>}<Button type="submit" className="w-full justify-center" disabled={create.isPending || geoState === 'loading'} data-testid="button-submit-request">{create.isPending ? 'Mengirim permintaan...' : <>Lanjut ke pembayaran <ArrowRight size={16} /></>}</Button><p className="text-center text-[11px] text-muted-foreground">Biaya kunjungan <strong className="text-foreground">Rp25.000</strong> · dibayar di muka</p></form> : <div className="space-y-4"><div className="success-panel"><BadgeCheck size={25} /><div><strong>Permintaan tercatat</strong><p>Kode Anda <b>{submitted.code}</b>. Selesaikan pembayaran untuk mengunci jadwal kunjungan.</p></div></div>{!paid ? <><div className="payment-line"><span><span className="block text-xs font-bold">Biaya kunjungan</span><span className="text-[11px] text-muted-foreground">Sekali bayar, belum termasuk perbaikan</span></span><strong>{rupiah(submitted.visitFee)}</strong></div><div className="method-grid">{[['qris', 'QRIS'], ['bank_transfer', 'Transfer bank'], ['e_wallet', 'E-wallet']].map(([v, label]) => <button type="button" key={v} onClick={() => setMethod(v as typeof method)} className={`method-option ${method === v ? 'method-selected' : ''}`} data-testid={`button-payment-${v}`}><span className="method-radio" />{label}</button>)}</div><Button className="w-full justify-center" onClick={() => pay.mutate({ requestId: submitted.id, data: { method } }, { onSuccess: () => setPaid(true) })} disabled={pay.isPending} data-testid="button-pay-visit">{pay.isPending ? 'Memproses pembayaran...' : <>Bayar {rupiah(submitted.visitFee)} <ArrowRight size={16} /></>}</Button></> : <div className="space-y-3"><div className="success-panel"><Check size={25} /><div><strong>Pembayaran berhasil</strong><p>Admin SEIIKI akan menghubungi Anda melalui WhatsApp.</p></div></div><a className="btn btn-whatsapp w-full justify-center" href="https://wa.me/6281112345678" target="_blank" rel="noreferrer" data-testid="link-whatsapp-admin"><MessageCircle size={16} /> Lanjut ke WhatsApp admin</a></div>}<button onClick={() => { setSubmitted(null); setPaid(false); setCoords(null); setGeoState('idle'); }} className="w-full text-center text-xs font-bold text-muted-foreground underline" data-testid="button-new-request">Buat permintaan lain</button></div>}</div></section>
     <section id="alur" className="customer-flow"><div className="eyebrow">Alur SEIIKI</div><h2>Rapi sejak pesan pertama.</h2><div className="flow-grid">{[['01', 'Ajukan', 'Ceritakan kebutuhan listrik dan lokasi Anda.'], ['02', 'Bayar kunjungan', 'Rp25.000 untuk biaya kedatangan teknisi.'], ['03', 'Kami datang', 'Admin dan teknisi meneruskan detail lewat WhatsApp.']].map(([n, t, b]) => <div className="flow-item" key={n}><span>{n}</span><strong>{t}</strong><p>{b}</p></div>)}</div></section>
     <section id="aman" className="customer-assurance"><div><div className="eyebrow">Yang bisa Anda pegang</div><h2>Tenang, ada tim di balik setiap kunjungan.</h2></div><div className="assurance-list"><div><ShieldCheck size={20} /><span><strong>Teknisi terarah</strong><small>Penugasan disesuaikan dengan kebutuhan layanan.</small></span></div><div><MessageCircle size={20} /><span><strong>Admin mudah dihubungi</strong><small>Setelah bayar, percakapan berlanjut di WhatsApp.</small></span></div><div><ReceiptText size={20} /><span><strong>Biaya transparan</strong><small>Biaya kunjungan dipisahkan dari estimasi perbaikan.</small></span></div></div></section>
     <footer className="customer-footer"><Logo /><span>© 2024 SEIIKI · PT Solusi Energi Kelistrikan Indonesia</span><span className="font-mono text-[10px] uppercase tracking-widest">clear work · safe homes</span></footer>
   </div>;
-}
-
-function AuthLoading() {
-  return <div className="grid min-h-[100dvh] place-items-center bg-background p-6 text-center"><div><Logo /><p className="mt-6 text-sm text-muted-foreground">Memuat sesi aman…</p></div></div>;
-}
-
-function SignInPage() {
-  return <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4"><SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} /></div>;
-}
-
-function SignUpPage() {
-  return <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4"><SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} /></div>;
-}
-
-function AuthUnavailable() {
-  return <div className="grid min-h-[100dvh] place-items-center bg-background p-6 text-center"><div className="max-w-md"><Logo /><div className="mt-10"><div className="eyebrow">Akses tim</div><h1 className="mt-2">Login belum diaktifkan.</h1><p className="mt-3 text-sm leading-6 text-muted-foreground">Halaman layanan pelanggan sudah siap digunakan. Akses admin dan pekerja memerlukan konfigurasi autentikasi Clerk sebelum aplikasi dipublikasikan untuk operasional.</p><Link href="/" className="btn btn-primary mt-6 inline-flex">Kembali ke beranda</Link></div></div></div>;
-}
-
-function HomeRedirect() {
-  const { isLoaded, isSignedIn } = useAuth();
-  const { user } = useUser();
-  if (!isLoaded) return <AuthLoading />;
-  if (!isSignedIn) return <CustomerHome />;
-  const role = (user?.publicMetadata as { role?: string } | undefined)?.role;
-  return <Redirect to={role === 'worker' ? '/worker' : '/admin'} />;
-}
-
-function AccessDenied({ role }: { role: 'admin' | 'worker' }) {
-  const { signOut } = useClerk();
-  return <div className="grid min-h-[100dvh] place-items-center bg-background p-6 text-center"><div className="max-w-md"><Logo /><div className="mt-10"><div className="eyebrow">Akses terbatas</div><h1 className="mt-2">Role belum tersedia.</h1><p className="mt-3 text-sm leading-6 text-muted-foreground">Akun ini belum memiliki akses {role === 'admin' ? 'admin operasi' : 'pekerja lapangan'}. Minta administrator mengatur role akun Anda di pengaturan autentikasi.</p><div className="mt-6 flex justify-center gap-2"><Link href="/" className="btn btn-outline">Kembali ke beranda</Link><button className="btn btn-primary" onClick={() => signOut({ redirectUrl: basePath || '/' })}>Keluar</button></div></div></div></div>;
-}
-
-function RoleGate({ role, children }: { role: 'admin' | 'worker'; children: React.ReactNode }) {
-  const { isLoaded, isSignedIn } = useAuth();
-  const { user } = useUser();
-  if (!isLoaded) return <AuthLoading />;
-  if (!isSignedIn) return <Redirect to="/sign-in" />;
-  const userRole = (user?.publicMetadata as { role?: string } | undefined)?.role;
-  if (userRole !== role) return <AccessDenied role={role} />;
-  return <>{children}</>;
-}
-
-function AdminRoute() { return <RoleGate role="admin"><AdminHome /></RoleGate>; }
-function AdminRequestsRoute() { return <RoleGate role="admin"><AdminRequests /></RoleGate>; }
-function AdminTransactionsRoute() { return <RoleGate role="admin"><AdminTransactions /></RoleGate>; }
-function AdminEquipmentRoute() { return <RoleGate role="admin"><AdminEquipment /></RoleGate>; }
-function AdminUsersRoute() { return <RoleGate role="admin"><AdminUsers /></RoleGate>; }
-function WorkerRoute() { return <RoleGate role="worker"><WorkerHome /></RoleGate>; }
-function WorkerEquipmentRoute() { return <RoleGate role="worker"><WorkerEquipment /></RoleGate>; }
-function WorkerReportsRoute() { return <RoleGate role="worker"><WorkerReports /></RoleGate>; }
-
-function ClerkQueryClientCacheInvalidator() {
-  const { addListener } = useClerk();
-  const queryClient = useQueryClient();
-  const previousUserId = useRef<string | null | undefined>(undefined);
-  useEffect(() => {
-    const unsubscribe = addListener(({ user }) => {
-      const userId = user?.id ?? null;
-      if (previousUserId.current !== undefined && previousUserId.current !== userId) {
-        queryClient.clear();
-      }
-      previousUserId.current = userId;
-    });
-    return unsubscribe;
-  }, [addListener, queryClient]);
-  return null;
 }
 
 function AdminHome() {
@@ -374,26 +263,11 @@ function WorkerEquipment() {
 
 function NotFound() { return <div className="grid min-h-[100dvh] place-items-center bg-background p-6 text-center"><div><Logo /><h1 className="mt-10">Halaman tidak ditemukan</h1><p className="mt-2 text-sm text-muted-foreground">Rute ini belum tersedia di ruang kerja SEIIKI.</p><Link href="/" className="btn btn-primary mt-6 inline-flex" data-testid="link-not-found-home">Kembali ke beranda</Link></div></div>; }
 
-function Router() {
-  if (!clerkPubKey) return <PublicRouter />;
-  return <ErrorBoundary resetKey={window.location.pathname}><Switch><Route path="/" component={HomeRedirect} /><Route path="/sign-in/*?" component={SignInPage} /><Route path="/sign-up/*?" component={SignUpPage} /><Route path="/login" component={() => <Redirect to="/sign-in" />} /><Route path="/admin" component={AdminRoute} /><Route path="/admin/requests" component={AdminRequestsRoute} /><Route path="/admin/transactions" component={AdminTransactionsRoute} /><Route path="/admin/equipment" component={AdminEquipmentRoute} /><Route path="/admin/users" component={AdminUsersRoute} /><Route path="/worker" component={WorkerRoute} /><Route path="/worker/equipment" component={WorkerEquipmentRoute} /><Route path="/worker/reports" component={WorkerReportsRoute} /><Route component={NotFound} /></Switch></ErrorBoundary>;
+function AppRoutes() {
+  return <ErrorBoundary resetKey={window.location.pathname}><Switch><Route path="/" component={CustomerHome} /><Route path="/admin" component={AdminHome} /><Route path="/admin/requests" component={AdminRequests} /><Route path="/admin/transactions" component={AdminTransactions} /><Route path="/admin/equipment" component={AdminEquipment} /><Route path="/admin/users" component={AdminUsers} /><Route path="/worker" component={WorkerHome} /><Route path="/worker/equipment" component={WorkerEquipment} /><Route path="/worker/reports" component={WorkerReports} /><Route component={NotFound} /></Switch></ErrorBoundary>;
 }
 
-function PublicRouter() {
-  return <ErrorBoundary resetKey={window.location.pathname}><Switch><Route path="/" component={CustomerHome} /><Route path="/sign-in/*?" component={AuthUnavailable} /><Route path="/sign-up/*?" component={AuthUnavailable} /><Route path="/login" component={AuthUnavailable} /><Route path="/admin" component={AuthUnavailable} /><Route path="/admin/requests" component={AuthUnavailable} /><Route path="/admin/transactions" component={AuthUnavailable} /><Route path="/admin/equipment" component={AuthUnavailable} /><Route path="/admin/users" component={AuthUnavailable} /><Route path="/worker" component={AuthUnavailable} /><Route path="/worker/equipment" component={AuthUnavailable} /><Route path="/worker/reports" component={AuthUnavailable} /><Route component={NotFound} /></Switch></ErrorBoundary>;
+function App() {
+  return <WouterRouter base={basePath}><QueryClientProvider client={queryClient}><TooltipProvider><AppRoutes /><Toaster /></TooltipProvider></QueryClientProvider></WouterRouter>;
 }
-
-function stripBase(path: string) {
-  return basePath && path.startsWith(basePath) ? path.slice(basePath.length) || '/' : path;
-}
-
-function ClerkProviderWithRoutes() {
-  const [, setLocation] = useLocation();
-  if (!clerkPubKey) {
-    return <QueryClientProvider client={queryClient}><TooltipProvider><PublicRouter /><Toaster /></TooltipProvider></QueryClientProvider>;
-  }
-  return <ClerkProvider publishableKey={clerkPubKey} proxyUrl={clerkProxyUrl} appearance={clerkAppearance} signInUrl={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} routerPush={(to) => setLocation(stripBase(to))} routerReplace={(to) => setLocation(stripBase(to), { replace: true })}><QueryClientProvider client={queryClient}><ClerkQueryClientCacheInvalidator /><TooltipProvider><Router /><Toaster /></TooltipProvider></QueryClientProvider></ClerkProvider>;
-}
-
-function App() { return <WouterRouter base={basePath}><ClerkProviderWithRoutes /></WouterRouter>; }
 export default App;

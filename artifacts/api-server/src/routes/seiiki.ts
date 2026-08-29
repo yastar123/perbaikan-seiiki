@@ -27,8 +27,6 @@ import {
   DeleteServiceRequestParams,
   DeleteUserParams,
 } from "@workspace/api-zod";
-import { requireAuth, requireRole } from "../middlewares/auth";
-
 const router: IRouter = Router();
 const requestStatuses = [
   "waiting_payment",
@@ -93,7 +91,7 @@ function mapUser(user: typeof dashboardUsersTable.$inferSelect) {
   };
 }
 
-router.get("/requests", requireAuth, requireRole("admin", "worker"), async (req, res): Promise<void> => {
+router.get("/requests", async (req, res): Promise<void> => {
   const parsed = ListServiceRequestsQueryParams.safeParse({
     status: req.query.status ?? "all",
     from: asDate(req.query.from),
@@ -143,7 +141,7 @@ router.post("/requests", async (req, res): Promise<void> => {
   res.status(201).json(await mapRequest(request));
 });
 
-router.patch("/requests/:id", requireAuth, requireRole("admin"), async (req, res): Promise<void> => {
+router.patch("/requests/:id", async (req, res): Promise<void> => {
   const params = UpdateServiceRequestParams.safeParse(req.params);
   const parsed = UpdateServiceRequestBody.safeParse(req.body);
   if (!params.success) {
@@ -204,7 +202,7 @@ router.patch("/requests/:id", requireAuth, requireRole("admin"), async (req, res
   res.json(await mapRequest(request));
 });
 
-router.delete("/requests/:id", requireAuth, requireRole("admin"), async (req, res): Promise<void> => {
+router.delete("/requests/:id", async (req, res): Promise<void> => {
   const params = DeleteServiceRequestParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -221,7 +219,7 @@ router.delete("/requests/:id", requireAuth, requireRole("admin"), async (req, re
   res.sendStatus(204);
 });
 
-router.get("/workers", requireAuth, requireRole("admin"), async (_req, res): Promise<void> => {
+router.get("/workers", async (_req, res): Promise<void> => {
   const workers = await db
     .select()
     .from(dashboardUsersTable)
@@ -248,7 +246,7 @@ router.get("/workers", requireAuth, requireRole("admin"), async (_req, res): Pro
   );
 });
 
-router.get("/dashboard/summary", requireAuth, requireRole("admin"), async (_req, res): Promise<void> => {
+router.get("/dashboard/summary", async (_req, res): Promise<void> => {
   const requests = await db.select().from(serviceRequestsTable);
   const visit = await db
     .select({ value: sum(transactionsTable.amount) })
@@ -334,7 +332,7 @@ router.post("/payments/:requestId", async (req, res): Promise<void> => {
   void updated;
 });
 
-router.get("/transactions", requireAuth, requireRole("admin"), async (req, res): Promise<void> => {
+router.get("/transactions", async (req, res): Promise<void> => {
   const parsed = ListTransactionsQueryParams.safeParse({
     period: req.query.period ?? "all",
     from: asDate(req.query.from),
@@ -370,7 +368,7 @@ router.get("/transactions", requireAuth, requireRole("admin"), async (req, res):
   );
 });
 
-router.get("/equipment-requests", requireAuth, requireRole("admin", "worker"), async (_req, res): Promise<void> => {
+router.get("/equipment-requests", async (_req, res): Promise<void> => {
   const requests = await db
     .select()
     .from(equipmentRequestsTable)
@@ -384,7 +382,7 @@ router.get("/equipment-requests", requireAuth, requireRole("admin", "worker"), a
   );
 });
 
-router.post("/equipment-requests", requireAuth, requireRole("worker"), async (req, res): Promise<void> => {
+router.post("/equipment-requests", async (req, res): Promise<void> => {
   const parsed = CreateEquipmentRequestBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -416,7 +414,7 @@ router.post("/equipment-requests", requireAuth, requireRole("worker"), async (re
   });
 });
 
-router.patch("/equipment-requests/:id", requireAuth, requireRole("admin"), async (req, res): Promise<void> => {
+router.patch("/equipment-requests/:id", async (req, res): Promise<void> => {
   const params = UpdateEquipmentRequestParams.safeParse(req.params);
   const parsed = UpdateEquipmentRequestBody.safeParse(req.body);
   if (!params.success || !parsed.success) {
@@ -439,7 +437,7 @@ router.patch("/equipment-requests/:id", requireAuth, requireRole("admin"), async
   });
 });
 
-router.post("/requests/:id/reports", requireAuth, requireRole("worker"), async (req, res): Promise<void> => {
+router.post("/requests/:id/reports", async (req, res): Promise<void> => {
   const params = CreateFieldReportParams.safeParse(req.params);
   const parsed = CreateFieldReportBody.safeParse(req.body);
   if (!params.success || !parsed.success) {
@@ -457,7 +455,7 @@ router.post("/requests/:id/reports", requireAuth, requireRole("worker"), async (
   res.status(201).json(report);
 });
 
-router.get("/users", requireAuth, requireRole("admin"), async (_req, res): Promise<void> => {
+router.get("/users", async (_req, res): Promise<void> => {
   const users = await db
     .select()
     .from(dashboardUsersTable)
@@ -465,7 +463,7 @@ router.get("/users", requireAuth, requireRole("admin"), async (_req, res): Promi
   res.json(users.map(mapUser));
 });
 
-router.post("/users", requireAuth, requireRole("admin"), async (req, res): Promise<void> => {
+router.post("/users", async (req, res): Promise<void> => {
   const parsed = CreateUserBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -478,7 +476,7 @@ router.post("/users", requireAuth, requireRole("admin"), async (req, res): Promi
   res.status(201).json(mapUser(user));
 });
 
-router.patch("/users/:id", requireAuth, requireRole("admin"), async (req, res): Promise<void> => {
+router.patch("/users/:id", async (req, res): Promise<void> => {
   const params = UpdateUserParams.safeParse(req.params);
   const parsed = UpdateUserBody.safeParse(req.body);
   if (!params.success || !parsed.success) {
@@ -497,7 +495,7 @@ router.patch("/users/:id", requireAuth, requireRole("admin"), async (req, res): 
   res.json(mapUser(user));
 });
 
-router.delete("/users/:id", requireAuth, requireRole("admin"), async (req, res): Promise<void> => {
+router.delete("/users/:id", async (req, res): Promise<void> => {
   const params = DeleteUserParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
