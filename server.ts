@@ -52,7 +52,7 @@ async function startServer() {
   } else {
     const distPath = path.resolve(process.cwd(), "artifacts/seiiki-listrik/dist/public");
     app.use(express.static(distPath));
-    app.get("*", (_req, res) => {
+    app.use((_req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
