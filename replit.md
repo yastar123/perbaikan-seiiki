@@ -13,7 +13,7 @@ Platform layanan perbaikan dan instalasi listrik untuk pelanggan, admin operasi,
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - Required env for the API: `DATABASE_URL` — Postgres connection string
-- In Replit, use the `SEIIKI API` and `SEIIKI Web` workflows so the proxy routes `/api` and `/` correctly.
+- In Replit, use the managed `artifacts/api-server: API Server` and `artifacts/seiiki-listrik: web` workflows so the artifact router handles `/api` and `/` correctly.
 
 ## Stack
 
@@ -42,7 +42,7 @@ Platform layanan perbaikan dan instalasi listrik untuk pelanggan, admin operasi,
 ## Public launch checklist
 
 - Run `pnpm run build` to validate all workspace packages.
-- Confirm the `SEIIKI API` and `SEIIKI Web` workflows are running.
+- Confirm the managed `artifacts/api-server: API Server` and `artifacts/seiiki-listrik: web` workflows are running.
 - Add an authentication layer before using the admin and worker dashboards with real operational data.
 - Publish from Replit; the web artifact is served from `artifacts/seiiki-listrik/dist/public`, while the API uses the production server defined in its artifact manifest.
 
