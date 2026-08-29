@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
-import { Link, Route, Switch, useLocation, useParams } from 'wouter';
+import { Link, Redirect, Route, Switch, useLocation } from 'wouter';
+import { ClerkProvider, SignIn, SignUp, useAuth, useClerk, useUser } from '@clerk/react';
+import { publishableKeyFromHost } from '@clerk/react/internal';
+import { shadcn } from '@clerk/themes';
 import {
   Activity, ArrowRight, BadgeCheck, Banknote, BarChart3, Bell, Boxes, BriefcaseBusiness,
   CalendarDays, Check, ChevronDown, ClipboardCheck, Clock3, FileText, Headphones,
@@ -23,21 +26,52 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 const queryClient = new QueryClient();
+const clerkPubKey = publishableKeyFromHost(
+  window.location.hostname,
+  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
+);
+const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
+const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+const clerkAppearance = {
+  theme: shadcn,
+  cssLayerName: 'clerk',
+  options: {
+    logoPlacement: 'inside' as const,
+    logoLinkUrl: basePath || '/',
+    logoImageUrl: `${window.location.origin}${basePath}/logo.svg`,
+  },
+  variables: {
+    colorPrimary: '#eab308',
+    colorForeground: '#17313a',
+    colorMutedForeground: '#60737a',
+    colorDanger: '#c2410c',
+    colorBackground: '#fffdf8',
+    colorInput: '#fffdf8',
+    colorInputForeground: '#17313a',
+    colorNeutral: '#d9d5ca',
+    fontFamily: 'Manrope, ui-sans-serif, sans-serif',
+    borderRadius: '0.75rem',
+  },
+  elements: {
+    rootBox: 'w-full flex justify-center',
+    cardBox: 'bg-[#fffdf8] rounded-2xl w-[440px] max-w-full overflow-hidden',
+    card: '!shadow-none !border-0 !bg-transparent !rounded-none',
+    footer: '!shadow-none !border-0 !bg-transparent !rounded-none',
+    headerTitle: 'text-[#17313a]',
+    headerSubtitle: 'text-[#60737a]',
+    socialButtonsBlockButtonText: 'text-[#17313a]',
+    formFieldLabel: 'text-[#17313a]',
+    footerActionLink: 'text-[#c2410c]',
+    footerActionText: 'text-[#60737a]',
+    dividerText: 'text-[#60737a]',
+    formButtonPrimary: 'bg-[#eab308] text-[#17313a] hover:bg-[#facc15]',
+    formFieldInput: 'border-[#d9d5ca] text-[#17313a]',
+    card: '!shadow-none !border-0 !bg-transparent !rounded-none',
+  },
+};
 const rupiah = (n = 0) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n);
 const date = (value: string) => new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(value));
 const time = (value: string) => new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
-
-const demoWorkers: Worker[] = [
-  { id: 1, name: 'Arif Setiawan', phone: '0812 7740 9211', specialty: 'Instalasi & panel', status: 'available' },
-  { id: 2, name: 'Maya Pratiwi', phone: '0813 2041 6658', specialty: 'Rumah tinggal', status: 'assigned' },
-  { id: 3, name: 'Dimas Nugraha', phone: '0821 8894 2307', specialty: 'Troubleshooting', status: 'available' },
-];
-const demoRequests: ServiceRequest[] = [
-  { id: 41, code: 'SK-240618-041', customerName: 'Rizky Adi', whatsapp: '0812 9900 1144', address: 'Jl. Kemang Raya No. 18, Jakarta Selatan', latitude: -6.2607, longitude: 106.8143, serviceType: 'Perbaikan listrik rumah', notes: 'MCB sering turun saat AC menyala.', status: 'paid', paymentStatus: 'paid', visitFee: 25000, repairCost: null, assignedWorkerId: null, assignedWorkerName: null, reportCount: 0, createdAt: '2024-06-18T08:42:00Z' },
-  { id: 40, code: 'SK-240617-040', customerName: 'Nadia Kurnia', whatsapp: '0811 3300 7742', address: 'Perumahan Citra Garden, Tangerang', latitude: -6.1698, longitude: 106.6402, serviceType: 'Instalasi titik lampu', notes: 'Butuh tambahan 3 titik lampu.', status: 'on_site', paymentStatus: 'paid', visitFee: 25000, repairCost: 375000, assignedWorkerId: 2, assignedWorkerName: 'Maya Pratiwi', reportCount: 1, createdAt: '2024-06-17T14:18:00Z' },
-  { id: 39, code: 'SK-240616-039', customerName: 'Bima Santoso', whatsapp: '0812 6655 9121', address: 'Jl. Cempaka Putih Tengah, Jakarta Pusat', latitude: -6.1815, longitude: 106.8626, serviceType: 'Pemeriksaan instalasi', notes: null, status: 'completed', paymentStatus: 'paid', visitFee: 25000, repairCost: 180000, assignedWorkerId: 1, assignedWorkerName: 'Arif Setiawan', reportCount: 2, createdAt: '2024-06-16T10:04:00Z' },
-];
-const demoSummary: DashboardSummary = { totalRequests: 27, pendingAssignment: 4, onSite: 3, completed: 18, visitRevenue: 675000, repairRevenue: 4825000, recentActivity: [{ label: 'Laporan lapangan masuk', detail: 'SK-240617-040 · Maya Pratiwi', time: '12 menit lalu' }, { label: 'Pembayaran diterima', detail: 'SK-240618-041 · Rp25.000', time: '48 menit lalu' }, { label: 'Kunjungan selesai', detail: 'SK-240616-039 · Arif Setiawan', time: 'Kemarin' }] };
 
 const statusLabel: Record<string, string> = { waiting_payment: 'Menunggu pembayaran', paid: 'Siap ditugaskan', assigned: 'Ditugaskan', on_site: 'Di lokasi', waiting_approval: 'Menunggu persetujuan', in_progress: 'Dikerjakan', completed: 'Selesai', cancelled: 'Dibatalkan', unpaid: 'Belum dibayar', pending: 'Menunggu', approved: 'Disetujui', rejected: 'Ditolak', active: 'Aktif', inactive: 'Nonaktif' };
 const statusTone = (status: string) => status === 'completed' || status === 'approved' || status === 'paid' || status === 'active' ? 'good' : status === 'cancelled' || status === 'rejected' || status === 'inactive' ? 'bad' : status === 'on_site' || status === 'in_progress' || status === 'urgent' ? 'warm' : 'neutral';
@@ -80,7 +114,10 @@ const workerNav = [
 function AppShell({ children, role = 'admin' }: { children: React.ReactNode; role?: 'admin' | 'worker' }) {
   const [menu, setMenu] = useState(false);
   const [location] = useLocation();
+  const { user } = useUser();
   const nav = role === 'admin' ? adminNav : workerNav;
+  const displayName = user?.fullName || user?.primaryEmailAddress?.emailAddress || (role === 'admin' ? 'Admin SEIIKI' : 'Pekerja lapangan');
+  const initials = displayName.split(/\s+/).map((value) => value[0]).join('').slice(0, 2).toUpperCase();
   return <div className="app-noise min-h-[100dvh] bg-background">
     <aside className={`sidebar ${menu ? 'sidebar-open' : ''}`}>
       <div className="flex items-center justify-between"><Logo inverse /><button className="sidebar-close md:hidden" onClick={() => setMenu(false)} data-testid="button-close-menu"><X size={18} /></button></div>
@@ -92,7 +129,7 @@ function AppShell({ children, role = 'admin' }: { children: React.ReactNode; rol
       </div>
     </aside>
     <main className="md:pl-[264px]">
-      <header className="topbar"><button className="menu-trigger md:hidden" onClick={() => setMenu(true)} data-testid="button-open-menu"><Menu size={20} /></button><div className="hidden text-sm text-muted-foreground md:block">{role === 'admin' ? 'Operasional / ' : 'Lapangan / '}<strong className="text-foreground">{pageName(location)}</strong></div><div className="ml-auto flex items-center gap-3"><button className="icon-button" data-testid="button-notifications"><Bell size={17} /><i /></button><span className="hidden h-5 w-px bg-border sm:block" /><div className="flex items-center gap-2.5"><span className="avatar">{role === 'admin' ? 'AS' : 'AR'}</span><div className="hidden leading-tight sm:block"><strong className="block text-xs">{role === 'admin' ? 'Ayu Sari' : 'Arif Setiawan'}</strong><span className="text-[10px] text-muted-foreground">{role === 'admin' ? 'Administrator' : 'Teknisi lapangan'}</span></div><ChevronDown size={14} className="text-muted-foreground" /></div></div></header>
+       <header className="topbar"><button className="menu-trigger md:hidden" onClick={() => setMenu(true)} data-testid="button-open-menu"><Menu size={20} /></button><div className="hidden text-sm text-muted-foreground md:block">{role === 'admin' ? 'Operasional / ' : 'Lapangan / '}<strong className="text-foreground">{pageName(location)}</strong></div><div className="ml-auto flex items-center gap-3"><button className="icon-button" data-testid="button-notifications"><Bell size={17} /><i /></button><span className="hidden h-5 w-px bg-border sm:block" /><div className="flex items-center gap-2.5"><span className="avatar">{initials}</span><div className="hidden leading-tight sm:block"><strong className="block text-xs">{displayName}</strong><span className="text-[10px] text-muted-foreground">{role === 'admin' ? 'Administrator' : 'Teknisi lapangan'}</span></div><ChevronDown size={14} className="text-muted-foreground" /></div></div></header>
       <div className="page-wrap">{children}</div>
     </main>
   </div>;
