@@ -20,7 +20,7 @@ for (const envFile of [".env", ".env.example"]) {
 }
 
 const app = express();
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = Number(process.env.PORT) || 4001;
 
 app.use(
   cors({
