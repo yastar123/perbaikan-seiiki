@@ -2,6 +2,8 @@ import { drizzle as drizzlePg } from "drizzle-orm/node-postgres";
 import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
 import { PGlite } from "@electric-sql/pglite";
 import pg from "pg";
+import path from "path";
+import fs from "fs";
 import * as schema from "./schema";
 
 let dbInstance: any = null;
@@ -98,10 +100,25 @@ const SCHEMA_DDL = `
 `;
 
 export async function initDb(): Promise<void> {
+  if (!process.env.DATABASE_URL) {
+    for (const envFile of [".env", ".env.example"]) {
+      const fullPath = path.resolve(process.cwd(), envFile);
+      if (fs.existsSync(fullPath)) {
+        try {
+          if (typeof process.loadEnvFile === "function") {
+            process.loadEnvFile(fullPath);
+          }
+        } catch {}
+        if (process.env.DATABASE_URL) break;
+      }
+    }
+  }
+
   if (process.env.DATABASE_URL) {
     try {
       poolInstance = new pg.Pool({ connectionString: process.env.DATABASE_URL });
       await poolInstance.query("SELECT 1");
+      await poolInstance.query(SCHEMA_DDL);
       dbInstance = drizzlePg(poolInstance, { schema });
       console.log("[DB] Connected to PostgreSQL via DATABASE_URL");
       return;

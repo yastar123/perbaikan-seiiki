@@ -1,13 +1,26 @@
 import express from "express";
 import path from "path";
 import cors from "cors";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import apiRouter from "./artifacts/api-server/src/routes/index";
 import { seedDemoData } from "./artifacts/api-server/src/lib/seed";
 import { initDb } from "./lib/db/src/index";
 
+// Load environment variables from .env or .env.example if available
+for (const envFile of [".env", ".env.example"]) {
+  const envPath = path.resolve(process.cwd(), envFile);
+  if (fs.existsSync(envPath)) {
+    try {
+      if (typeof process.loadEnvFile === "function") {
+        process.loadEnvFile(envPath);
+      }
+    } catch {}
+  }
+}
+
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(
   cors({
