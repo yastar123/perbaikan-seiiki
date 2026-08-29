@@ -32,9 +32,6 @@ const clerkPubKey = publishableKeyFromHost(
 );
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
-if (!clerkPubKey) {
-  throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY in the environment.');
-}
 const clerkAppearance = {
   theme: shadcn,
   cssLayerName: 'clerk',
@@ -200,6 +197,10 @@ function SignInPage() {
 
 function SignUpPage() {
   return <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4"><SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} /></div>;
+}
+
+function AuthUnavailable() {
+  return <div className="grid min-h-[100dvh] place-items-center bg-background p-6 text-center"><div className="max-w-md"><Logo /><div className="mt-10"><div className="eyebrow">Akses tim</div><h1 className="mt-2">Login belum diaktifkan.</h1><p className="mt-3 text-sm leading-6 text-muted-foreground">Halaman layanan pelanggan sudah siap digunakan. Akses admin dan pekerja memerlukan konfigurasi autentikasi Clerk sebelum aplikasi dipublikasikan untuk operasional.</p><Link href="/" className="btn btn-primary mt-6 inline-flex">Kembali ke beranda</Link></div></div></div>;
 }
 
 function HomeRedirect() {
@@ -374,7 +375,12 @@ function WorkerEquipment() {
 function NotFound() { return <div className="grid min-h-[100dvh] place-items-center bg-background p-6 text-center"><div><Logo /><h1 className="mt-10">Halaman tidak ditemukan</h1><p className="mt-2 text-sm text-muted-foreground">Rute ini belum tersedia di ruang kerja SEIIKI.</p><Link href="/" className="btn btn-primary mt-6 inline-flex" data-testid="link-not-found-home">Kembali ke beranda</Link></div></div>; }
 
 function Router() {
+  if (!clerkPubKey) return <PublicRouter />;
   return <ErrorBoundary resetKey={window.location.pathname}><Switch><Route path="/" component={HomeRedirect} /><Route path="/sign-in/*?" component={SignInPage} /><Route path="/sign-up/*?" component={SignUpPage} /><Route path="/login" component={() => <Redirect to="/sign-in" />} /><Route path="/admin" component={AdminRoute} /><Route path="/admin/requests" component={AdminRequestsRoute} /><Route path="/admin/transactions" component={AdminTransactionsRoute} /><Route path="/admin/equipment" component={AdminEquipmentRoute} /><Route path="/admin/users" component={AdminUsersRoute} /><Route path="/worker" component={WorkerRoute} /><Route path="/worker/equipment" component={WorkerEquipmentRoute} /><Route path="/worker/reports" component={WorkerReportsRoute} /><Route component={NotFound} /></Switch></ErrorBoundary>;
+}
+
+function PublicRouter() {
+  return <ErrorBoundary resetKey={window.location.pathname}><Switch><Route path="/" component={CustomerHome} /><Route path="/sign-in/*?" component={AuthUnavailable} /><Route path="/sign-up/*?" component={AuthUnavailable} /><Route path="/login" component={AuthUnavailable} /><Route path="/admin" component={AuthUnavailable} /><Route path="/admin/requests" component={AuthUnavailable} /><Route path="/admin/transactions" component={AuthUnavailable} /><Route path="/admin/equipment" component={AuthUnavailable} /><Route path="/admin/users" component={AuthUnavailable} /><Route path="/worker" component={AuthUnavailable} /><Route path="/worker/equipment" component={AuthUnavailable} /><Route path="/worker/reports" component={AuthUnavailable} /><Route component={NotFound} /></Switch></ErrorBoundary>;
 }
 
 function stripBase(path: string) {
@@ -383,6 +389,9 @@ function stripBase(path: string) {
 
 function ClerkProviderWithRoutes() {
   const [, setLocation] = useLocation();
+  if (!clerkPubKey) {
+    return <QueryClientProvider client={queryClient}><TooltipProvider><PublicRouter /><Toaster /></TooltipProvider></QueryClientProvider>;
+  }
   return <ClerkProvider publishableKey={clerkPubKey} proxyUrl={clerkProxyUrl} appearance={clerkAppearance} signInUrl={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} routerPush={(to) => setLocation(stripBase(to))} routerReplace={(to) => setLocation(stripBase(to), { replace: true })}><QueryClientProvider client={queryClient}><ClerkQueryClientCacheInvalidator /><TooltipProvider><Router /><Toaster /></TooltipProvider></QueryClientProvider></ClerkProvider>;
 }
 

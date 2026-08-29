@@ -39,14 +39,20 @@ app.use(
     origin: true,
   }),
 );
-app.use(
-  clerkMiddleware((req) => ({
-    publishableKey: publishableKeyFromHost(
-      getClerkProxyHost(req) ?? "",
-      process.env.CLERK_PUBLISHABLE_KEY,
-    ),
-  })),
-);
+if (process.env.CLERK_SECRET_KEY) {
+  app.use(
+    clerkMiddleware((req) => ({
+      publishableKey: publishableKeyFromHost(
+        getClerkProxyHost(req) ?? "",
+        process.env.CLERK_PUBLISHABLE_KEY,
+      ),
+    })),
+  );
+} else {
+  logger.warn(
+    "CLERK_SECRET_KEY is not configured; dashboard authentication is disabled until Clerk is connected",
+  );
+}
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

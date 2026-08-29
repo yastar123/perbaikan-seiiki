@@ -1,0 +1,1 @@
+- [Imported workspace builds](vite-build-env.md) — root builds can invoke artifact Vite configs outside workflow env; configs need safe build-time defaults while workflows still provide runtime values.

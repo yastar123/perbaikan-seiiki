@@ -13,6 +13,12 @@ export function requireAuth(
   res: Response,
   next: NextFunction,
 ): void {
+  if (!process.env.CLERK_SECRET_KEY) {
+    res.status(503).json({
+      error: "Autentikasi dashboard belum dikonfigurasi",
+    });
+    return;
+  }
   const auth = getAuth(req);
   const userId =
     auth?.userId ||
