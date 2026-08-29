@@ -171,6 +171,35 @@ router.patch("/requests/:id", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Service request not found" });
     return;
   }
+  if (parsed.data.repairCost !== undefined && parsed.data.repairCost !== null) {
+    const existingRepairTransaction = (
+      await db
+        .select({ id: transactionsTable.id })
+        .from(transactionsTable)
+        .where(
+          and(
+            eq(transactionsTable.requestId, request.id),
+            eq(transactionsTable.type, "repair_fee"),
+          ),
+        )
+        .limit(1)
+    )[0];
+    if (existingRepairTransaction) {
+      await db
+        .update(transactionsTable)
+        .set({ amount: parsed.data.repairCost })
+        .where(eq(transactionsTable.id, existingRepairTransaction.id));
+    } else {
+      await db.insert(transactionsTable).values({
+        requestId: request.id,
+        requestCode: request.code,
+        customerName: request.customerName,
+        type: "repair_fee",
+        amount: parsed.data.repairCost,
+        status: "pending",
+      });
+    }
+  }
   res.json(await mapRequest(request));
 });
 
@@ -422,7 +451,7 @@ router.post("/requests/:id/reports", async (req, res): Promise<void> => {
     .returning();
   await db
     .update(serviceRequestsTable)
-    .set({ status: "completed" })
+    .set({ status: "waiting_approval" })
     .where(eq(serviceRequestsTable.id, params.data.id));
   res.status(201).json(report);
 });
