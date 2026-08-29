@@ -14,7 +14,9 @@ export function requireAuth(
   next: NextFunction,
 ): void {
   const auth = getAuth(req);
-  const userId = auth?.sessionClaims?.userId || auth?.userId;
+  const userId =
+    auth?.userId ||
+    (auth?.sessionClaims as { userId?: string } | undefined)?.userId;
   if (!userId) {
     res.status(401).json({ error: "Autentikasi diperlukan" });
     return;

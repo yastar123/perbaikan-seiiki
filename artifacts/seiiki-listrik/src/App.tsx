@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
-import { Link, Redirect, Route, Switch, useLocation } from 'wouter';
+import { Link, Redirect, Route, Router as WouterRouter, Switch, useLocation } from 'wouter';
 import { ClerkProvider, SignIn, SignUp, useAuth, useClerk, useUser } from '@clerk/react';
 import { publishableKeyFromHost } from '@clerk/react/internal';
 import { shadcn } from '@clerk/themes';
@@ -32,6 +32,9 @@ const clerkPubKey = publishableKeyFromHost(
 );
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+if (!clerkPubKey) {
+  throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY in the environment.');
+}
 const clerkAppearance = {
   theme: shadcn,
   cssLayerName: 'clerk',
@@ -66,7 +69,6 @@ const clerkAppearance = {
     dividerText: 'text-[#60737a]',
     formButtonPrimary: 'bg-[#eab308] text-[#17313a] hover:bg-[#facc15]',
     formFieldInput: 'border-[#d9d5ca] text-[#17313a]',
-    card: '!shadow-none !border-0 !bg-transparent !rounded-none',
   },
 };
 const rupiah = (n = 0) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n);
@@ -188,18 +190,79 @@ function CustomerHome() {
   </div>;
 }
 
-function Login() {
-  const [, setLocation] = useLocation();
-  const health = useHealthCheck();
-  const [role, setRole] = useState<'admin' | 'worker'>('admin');
-  return <div className="login-page app-noise"><div className="login-aside"><Logo inverse /><div className="mt-auto hidden max-w-sm md:block"><div className="eyebrow text-primary">SEIIKI operations hub</div><h1>Setiap kunjungan,<br /><em>terkendali.</em></h1><p>Ruang kerja untuk admin yang mengatur, dan teknisi yang menyelesaikan.</p><div className="mt-8 flex items-center gap-2 text-xs text-sidebar-foreground/60"><span className="status-dot bg-emerald-400" /> Sistem {health.isLoading ? 'memeriksa...' : 'siap digunakan'}</div></div><span className="mt-auto hidden text-[10px] uppercase tracking-[.18em] text-sidebar-foreground/35 md:block">PT Solusi Energi Kelistrikan Indonesia</span></div><div className="login-main"><Link href="/" className="mb-10 flex items-center gap-2 text-xs font-bold text-muted-foreground" data-testid="link-back-home"><ArrowRight size={14} className="rotate-180" /> Kembali ke halaman pelanggan</Link><div className="login-box rise-in"><div className="eyebrow">Demo akses</div><h2>Masuk ke ruang kerja</h2><p>Pilih peran untuk melihat alur kerja SEIIKI.</p><div className="role-picker">{(['admin', 'worker'] as const).map((r) => <button key={r} onClick={() => setRole(r)} className={role === r ? 'role-active' : ''} data-testid={`button-role-${r}`}><span className="role-icon">{r === 'admin' ? <LayoutDashboard size={18} /> : <Wrench size={18} />}</span><span><strong>{r === 'admin' ? 'Admin operasi' : 'Pekerja lapangan'}</strong><small>{r === 'admin' ? 'Atur kunjungan & tim' : 'Lihat tugas & laporan'}</small></span><span className="ml-auto text-primary">{role === r && <Check size={16} />}</span></button>)}</div><Field label="Nomor ponsel"><input placeholder="08xx xxxx xxxx" defaultValue={role === 'admin' ? '0812 0000 2323' : '0812 7740 9211'} data-testid="input-login-phone" /></Field><Button className="mt-5 w-full justify-center" onClick={() => setLocation(role === 'admin' ? '/admin' : '/worker')} data-testid="button-login">Masuk sebagai {role === 'admin' ? 'admin' : 'pekerja'} <ArrowRight size={16} /></Button><p className="mt-4 text-center text-[11px] text-muted-foreground">Mode demo · autentikasi akan terhubung di tahap berikutnya</p></div></div></div>;
+function AuthLoading() {
+  return <div className="grid min-h-[100dvh] place-items-center bg-background p-6 text-center"><div><Logo /><p className="mt-6 text-sm text-muted-foreground">Memuat sesi aman…</p></div></div>;
+}
+
+function SignInPage() {
+  return <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4"><SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} /></div>;
+}
+
+function SignUpPage() {
+  return <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4"><SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} /></div>;
+}
+
+function HomeRedirect() {
+  const { isLoaded, isSignedIn } = useAuth();
+  const { user } = useUser();
+  if (!isLoaded) return <AuthLoading />;
+  if (!isSignedIn) return <CustomerHome />;
+  const role = (user?.publicMetadata as { role?: string } | undefined)?.role;
+  return <Redirect to={role === 'worker' ? '/worker' : '/admin'} />;
+}
+
+function AccessDenied({ role }: { role: 'admin' | 'worker' }) {
+  const { signOut } = useClerk();
+  return <div className="grid min-h-[100dvh] place-items-center bg-background p-6 text-center"><div className="max-w-md"><Logo /><div className="mt-10"><div className="eyebrow">Akses terbatas</div><h1 className="mt-2">Role belum tersedia.</h1><p className="mt-3 text-sm leading-6 text-muted-foreground">Akun ini belum memiliki akses {role === 'admin' ? 'admin operasi' : 'pekerja lapangan'}. Minta administrator mengatur role akun Anda di pengaturan autentikasi.</p><div className="mt-6 flex justify-center gap-2"><Link href="/" className="btn btn-outline">Kembali ke beranda</Link><button className="btn btn-primary" onClick={() => signOut({ redirectUrl: basePath || '/' })}>Keluar</button></div></div></div></div>;
+}
+
+function RoleGate({ role, children }: { role: 'admin' | 'worker'; children: React.ReactNode }) {
+  const { isLoaded, isSignedIn } = useAuth();
+  const { user } = useUser();
+  if (!isLoaded) return <AuthLoading />;
+  if (!isSignedIn) return <Redirect to="/sign-in" />;
+  const userRole = (user?.publicMetadata as { role?: string } | undefined)?.role;
+  if (userRole !== role) return <AccessDenied role={role} />;
+  return <>{children}</>;
+}
+
+function AdminRoute() { return <RoleGate role="admin"><AdminHome /></RoleGate>; }
+function AdminRequestsRoute() { return <RoleGate role="admin"><AdminRequests /></RoleGate>; }
+function AdminTransactionsRoute() { return <RoleGate role="admin"><AdminTransactions /></RoleGate>; }
+function AdminEquipmentRoute() { return <RoleGate role="admin"><AdminEquipment /></RoleGate>; }
+function AdminUsersRoute() { return <RoleGate role="admin"><AdminUsers /></RoleGate>; }
+function WorkerRoute() { return <RoleGate role="worker"><WorkerHome /></RoleGate>; }
+function WorkerEquipmentRoute() { return <RoleGate role="worker"><WorkerEquipment /></RoleGate>; }
+function WorkerReportsRoute() { return <RoleGate role="worker"><WorkerReports /></RoleGate>; }
+
+function ClerkQueryClientCacheInvalidator() {
+  const { addListener } = useClerk();
+  const queryClient = useQueryClient();
+  const previousUserId = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    const unsubscribe = addListener(({ user }) => {
+      const userId = user?.id ?? null;
+      if (previousUserId.current !== undefined && previousUserId.current !== userId) {
+        queryClient.clear();
+      }
+      previousUserId.current = userId;
+    });
+    return unsubscribe;
+  }, [addListener, queryClient]);
+  return null;
 }
 
 function AdminHome() {
   const summaryQuery = useGetDashboardSummary();
   const requestQuery = useListServiceRequests();
-  const summary = summaryQuery.data || demoSummary;
-  const requests = requestQuery.data || demoRequests;
+  if (summaryQuery.isLoading || requestQuery.isLoading) {
+    return <AppShell><LoadingRows /></AppShell>;
+  }
+  if (summaryQuery.isError || !summaryQuery.data) {
+    return <AppShell><ErrorNotice retry={() => { void summaryQuery.refetch(); void requestQuery.refetch(); }} /></AppShell>;
+  }
+  const summary = summaryQuery.data;
+  const requests = requestQuery.data ?? [];
   return <AppShell><PageIntro eyebrow="Selasa, 18 Juni 2024" title="Ringkasan operasi" body="Selamat pagi, Ayu. Ini keadaan tim dan kunjungan hari ini." action={<Button kind="soft" onClick={() => summaryQuery.refetch()} data-testid="button-refresh-summary"><RefreshCw size={15} /> Segarkan</Button>} /><div className="stat-grid"><Stat label="Total permintaan" value={String(summary.totalRequests)} note="sepanjang bulan ini" icon={ClipboardCheck} /><Stat label="Perlu ditugaskan" value={String(summary.pendingAssignment)} note="menunggu teknisi" icon={Clock3} accent="orange" /><Stat label="Sedang di lokasi" value={String(summary.onSite)} note="kunjungan berlangsung" icon={MapPin} accent="blue" /><Stat label="Selesai" value={String(summary.completed)} note="bulan ini" icon={BadgeCheck} accent="green" /></div><div className="two-col mt-6"><section className="panel rise-in delay-1"><div className="panel-head"><div><div className="eyebrow">Perlu perhatian</div><h3>Permintaan terbaru</h3></div><Link href="/admin/requests" className="text-xs font-bold text-accent" data-testid="link-all-requests">Lihat semua <ArrowRight size={13} className="ml-1 inline" /></Link></div>{requestQuery.isLoading ? <LoadingRows /> : requestQuery.isError ? <ErrorNotice retry={requestQuery.refetch} /> : <RequestTable requests={requests} compact />}</section><section className="panel rise-in delay-2"><div className="panel-head"><div><div className="eyebrow">Aktivitas terkini</div><h3>Tim bergerak</h3></div><Activity size={18} className="text-muted-foreground" /></div><div className="activity-list">{summary.recentActivity.map((a, i) => <div className="activity-item" key={`${a.label}-${i}`}><span className={`activity-mark mark-${i}`}><Check size={13} /></span><span><strong>{a.label}</strong><small>{a.detail}</small></span><time>{a.time}</time></div>)}</div><div className="revenue-strip"><div><span>Pendapatan kunjungan</span><strong>{rupiah(summary.visitRevenue)}</strong></div><div><span>Pendapatan perbaikan</span><strong>{rupiah(summary.repairRevenue)}</strong></div></div></section></div></AppShell>;
 }
 
@@ -224,8 +287,8 @@ function AdminRequests() {
   const [selected, setSelected] = useState<ServiceRequest | null>(null);
   const [managed, setManaged] = useState<ServiceRequest | null>(null);
   const [search, setSearch] = useState('');
-  const requests = query.data || demoRequests;
-  const workers = workersQuery.data || demoWorkers;
+  const requests = query.data ?? [];
+  const workers = workersQuery.data ?? [];
   const shown = requests.filter((request) => (filter === 'all' || request.status === filter) && `${request.code} ${request.customerName} ${request.whatsapp}`.toLowerCase().includes(search.toLowerCase()));
   const assign = (workerId: number) => { if (!selected) return; update.mutate({ id: selected.id, data: { assignedWorkerId: workerId, status: 'assigned' } }, { onSuccess: () => { setSelected(null); client.invalidateQueries({ queryKey: getListServiceRequestsQueryKey() }); } }); };
   const manage = (data: { status: ServiceRequest['status']; repairCost: number | null }) => { if (!managed) return; update.mutate({ id: managed.id, data }, { onSuccess: () => { setManaged(null); client.invalidateQueries({ queryKey: getListServiceRequestsQueryKey() }); client.invalidateQueries({ queryKey: getListTransactionsQueryKey() }); client.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() }); } }); };
@@ -279,7 +342,7 @@ function WorkerHome() {
   const client = useQueryClient();
   const requestsQuery = useListServiceRequests();
   const update = useUpdateServiceRequest();
-  const requests = (requestsQuery.data || demoRequests).filter((r) => r.assignedWorkerId === 1);
+  const requests = (requestsQuery.data ?? []).filter((r) => r.assignedWorkerId === 1);
   const report = requests.find((r) => r.status === 'on_site');
   const startVisit = (id: number) => update.mutate({ id, data: { status: 'on_site' } }, { onSuccess: () => { client.invalidateQueries({ queryKey: getListServiceRequestsQueryKey() }); client.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() }); } });
   return <AppShell role="worker"><PageIntro eyebrow="Selasa, 18 Juni 2024" title="Kunjungan saya" body="Pagi, Arif. Berikut tugas yang perlu Anda siapkan hari ini." action={<Button kind="soft" onClick={() => requestsQuery.refetch()} data-testid="button-refresh-worker"><RefreshCw size={15} /> Segarkan</Button>} /><div className="worker-banner"><div><div className="eyebrow text-primary">Tugas aktif</div><h2>{requests.filter((r) => !['completed', 'cancelled'].includes(r.status)).length} kunjungan perlu perhatian</h2><p>Pastikan detail lokasi dan catatan pelanggan sudah terbaca sebelum berangkat.</p></div><div className="worker-banner-icon"><NavigationIcon /></div></div><div className="section-label"><span>Daftar kunjungan</span><Badge tone="neutral">{requests.length} tugas</Badge></div><div className="visit-list">{requests.map((r) => <div className="visit-card" key={r.id} data-testid={`card-visit-${r.id}`}><div className="visit-time"><span>{r.status === 'completed' ? 'Selesai' : 'Hari ini'}</span><strong>{r.status === 'on_site' ? 'Sedang dikerjakan' : r.status === 'waiting_approval' ? 'Menunggu cek admin' : '08.30 — 10.00'}</strong></div><div className="visit-main"><div className="flex items-start justify-between gap-3"><div><span className="font-mono text-[10px] font-bold text-accent">{r.code}</span><h3>{r.serviceType}</h3></div><Status value={r.status} /></div><p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin size={13} /> {r.address}</p><p className="mt-1 text-xs text-muted-foreground"><UserRound size={13} className="mr-1 inline" /> {r.customerName} · {r.whatsapp}</p><div className="mt-4 flex flex-wrap gap-2">{r.status === 'assigned' && <Button className="!px-3 !py-2 text-xs" onClick={() => startVisit(r.id)} disabled={update.isPending} data-testid={`button-start-visit-${r.id}`}><MapPin size={14} /> Mulai kunjungan</Button>}{r.status === 'on_site' && <Link href={`/worker/reports?request=${r.id}`} className="btn btn-primary !px-3 !py-2 text-xs" data-testid={`link-report-${r.id}`}><FileText size={14} /> Buat laporan</Link>}<a href={`https://www.google.com/maps?q=${r.latitude},${r.longitude}`} target="_blank" rel="noreferrer" className="btn btn-outline !px-3 !py-2 text-xs" data-testid={`link-worker-map-${r.id}`}><MapPin size={14} /> Buka lokasi</a><a href={`https://wa.me/${r.whatsapp.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" className="btn btn-outline !px-3 !py-2 text-xs" data-testid={`link-worker-whatsapp-${r.id}`}><MessageCircle size={14} /> WhatsApp pelanggan</a></div></div></div>)}</div>{report && <div className="notice notice-info mt-6"><Sparkles size={16} /><span><strong>Laporan dibutuhkan</strong> Kunjungan {report.code} sedang berlangsung. Catat hasil sebelum meninggalkan lokasi.</span></div>}</AppShell>;
@@ -294,7 +357,7 @@ function WorkerReports() {
   const [requestId, setRequestId] = useState(Number(params.get('request')) || 40);
   const [notes, setNotes] = useState('');
   const [media, setMedia] = useState<string[]>([]);
-  const requests = (requestsQuery.data || demoRequests).filter((r) => r.assignedWorkerId === 1 && r.status === 'on_site');
+  const requests = (requestsQuery.data ?? []).filter((r) => r.assignedWorkerId === 1 && r.status === 'on_site');
   const submit = (e: React.FormEvent) => { e.preventDefault(); create.mutate({ id: requestId, data: { notes, media } }, { onSuccess: () => { setNotes(''); setMedia([]); client.invalidateQueries({ queryKey: getListServiceRequestsQueryKey() }); client.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() }); } }); };
   return <AppShell role="worker"><PageIntro eyebrow="Bukti pekerjaan" title="Laporan lapangan" body="Tutup kunjungan dengan catatan yang jelas untuk admin dan pelanggan." /><div className="report-layout"><form className="panel report-form" onSubmit={submit}><div className="panel-head"><div><h3>Laporan baru</h3><p className="text-xs text-muted-foreground">Satu laporan untuk satu permintaan.</p></div><FileText size={18} className="text-muted-foreground" /></div><div className="space-y-5"><Field label="Permintaan"><select value={requestId} onChange={(e) => setRequestId(Number(e.target.value))} data-testid="select-report-request">{requests.map((r) => <option key={r.id} value={r.id}>{r.code} · {r.customerName}</option>)}</select></Field><Field label="Catatan pekerjaan" hint="Jelaskan temuan, tindakan, dan rekomendasi selanjutnya."><textarea required minLength={8} className="min-h-[170px]" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Contoh: Pemeriksaan MCB selesai. Ditemukan koneksi longgar pada jalur AC..." data-testid="input-report-notes" /></Field><Field label="Media pendukung" hint="Tambahkan nama file atau metadata foto/video yang diambil di lokasi."><div className="upload-box"><input type="file" multiple accept="image/*,video/*" onChange={(e) => setMedia(Array.from(e.target.files || []).map((f) => `${f.name} · ${Math.round(f.size / 1024)} KB`))} data-testid="input-report-media" /><Paperclip size={19} /><strong>Pilih foto atau video</strong><span>File tidak dikirim sebelum Anda menekan simpan</span></div>{media.length > 0 && <div className="mt-3 space-y-2">{media.map((m) => <div className="media-chip" key={m}><Paperclip size={13} />{m}<button type="button" onClick={() => setMedia(media.filter((x) => x !== m))} data-testid={`button-remove-media-${m}`}><X size={13} /></button></div>)}</div>}</Field></div><Button type="submit" className="mt-7 w-full justify-center" disabled={create.isPending} data-testid="button-submit-report">{create.isPending ? 'Menyimpan laporan...' : <><Send size={15} /> Simpan laporan</>}</Button></form><div className="panel report-side"><div className="eyebrow">Checklist sebelum kirim</div><h3>Detail yang membantu tim</h3>{['Kondisi awal dan temuan', 'Tindakan yang sudah dilakukan', 'Material atau biaya tambahan', 'Rekomendasi untuk pelanggan'].map((item) => <div className="check-row" key={item}><span><Check size={13} /></span>{item}</div>)}<div className="report-tip"><ShieldCheck size={18} /><span>Foto yang jelas membantu admin membuat keputusan lebih cepat.</span></div></div></div></AppShell>;
 }
@@ -311,7 +374,17 @@ function WorkerEquipment() {
 function NotFound() { return <div className="grid min-h-[100dvh] place-items-center bg-background p-6 text-center"><div><Logo /><h1 className="mt-10">Halaman tidak ditemukan</h1><p className="mt-2 text-sm text-muted-foreground">Rute ini belum tersedia di ruang kerja SEIIKI.</p><Link href="/" className="btn btn-primary mt-6 inline-flex" data-testid="link-not-found-home">Kembali ke beranda</Link></div></div>; }
 
 function Router() {
-  return <ErrorBoundary resetKey={window.location.pathname}><Switch><Route path="/" component={CustomerHome} /><Route path="/login" component={Login} /><Route path="/admin" component={AdminHome} /><Route path="/admin/requests" component={AdminRequests} /><Route path="/admin/transactions" component={AdminTransactions} /><Route path="/admin/equipment" component={AdminEquipment} /><Route path="/admin/users" component={AdminUsers} /><Route path="/worker" component={WorkerHome} /><Route path="/worker/equipment" component={WorkerEquipment} /><Route path="/worker/reports" component={WorkerReports} /><Route component={NotFound} /></Switch></ErrorBoundary>;
+  return <ErrorBoundary resetKey={window.location.pathname}><Switch><Route path="/" component={HomeRedirect} /><Route path="/sign-in/*?" component={SignInPage} /><Route path="/sign-up/*?" component={SignUpPage} /><Route path="/login" component={() => <Redirect to="/sign-in" />} /><Route path="/admin" component={AdminRoute} /><Route path="/admin/requests" component={AdminRequestsRoute} /><Route path="/admin/transactions" component={AdminTransactionsRoute} /><Route path="/admin/equipment" component={AdminEquipmentRoute} /><Route path="/admin/users" component={AdminUsersRoute} /><Route path="/worker" component={WorkerRoute} /><Route path="/worker/equipment" component={WorkerEquipmentRoute} /><Route path="/worker/reports" component={WorkerReportsRoute} /><Route component={NotFound} /></Switch></ErrorBoundary>;
 }
-function App() { return <QueryClientProvider client={queryClient}><TooltipProvider><Router /><Toaster /></TooltipProvider></QueryClientProvider>; }
+
+function stripBase(path: string) {
+  return basePath && path.startsWith(basePath) ? path.slice(basePath.length) || '/' : path;
+}
+
+function ClerkProviderWithRoutes() {
+  const [, setLocation] = useLocation();
+  return <ClerkProvider publishableKey={clerkPubKey} proxyUrl={clerkProxyUrl} appearance={clerkAppearance} signInUrl={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} routerPush={(to) => setLocation(stripBase(to))} routerReplace={(to) => setLocation(stripBase(to), { replace: true })}><QueryClientProvider client={queryClient}><ClerkQueryClientCacheInvalidator /><TooltipProvider><Router /><Toaster /></TooltipProvider></QueryClientProvider></ClerkProvider>;
+}
+
+function App() { return <WouterRouter base={basePath}><ClerkProviderWithRoutes /></WouterRouter>; }
 export default App;

@@ -19,7 +19,8 @@ export function getClerkProxyHost(req: {
 }
 
 export function clerkProxyMiddleware(): RequestHandler {
-  if (process.env.NODE_ENV !== "production" || !process.env.CLERK_SECRET_KEY) {
+  const clerkSecretKey = process.env.CLERK_SECRET_KEY;
+  if (process.env.NODE_ENV !== "production" || !clerkSecretKey) {
     return (_req, _res, next) => next();
   }
 
@@ -37,7 +38,7 @@ export function clerkProxyMiddleware(): RequestHandler {
           "Clerk-Proxy-Url",
           `${protocol}://${host}${CLERK_PROXY_PATH}`,
         );
-        proxyReq.setHeader("Clerk-Secret-Key", process.env.CLERK_SECRET_KEY);
+        proxyReq.setHeader("Clerk-Secret-Key", clerkSecretKey);
         const forwardedFor = req.headers["x-forwarded-for"];
         const clientIp =
           (Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor)

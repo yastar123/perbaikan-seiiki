@@ -15,9 +15,15 @@ localPort = 22402
 run = "pnpm --filter @workspace/seiiki-listrik run dev"
 
 [services.production]
-build = [ "pnpm", "--filter", "@workspace/seiiki-listrik", "run", "build" ]
 serve = "static"
 publicDir = "artifacts/seiiki-listrik/dist/public"
+
+[services.production.build]
+args = [ "pnpm", "--filter", "@workspace/seiiki-listrik", "run", "build" ]
+
+[services.production.build.env]
+PORT = "22402"
+BASE_PATH = "/"
 
 [[services.production.rewrites]]
 from = "/*"
