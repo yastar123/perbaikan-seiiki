@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { Link, Route, Router as WouterRouter, Switch, useLocation } from 'wouter';
 import {
   Activity, ArrowRight, BadgeCheck, Banknote, BarChart3, Bell, Boxes, BriefcaseBusiness,
   CalendarDays, Check, ChevronDown, ClipboardCheck, Clock3, FileText, Headphones,
-  LayoutDashboard, LocateFixed, LogIn, MapPin, Menu, MessageCircle, PackageCheck, Paperclip,
+  LayoutDashboard, LocateFixed, LogIn, LogOut, MapPin, Menu, MessageCircle, PackageCheck, Paperclip,
   Pencil, Plus, Radio, ReceiptText, RefreshCw, Search, Send, Settings2, ShieldCheck,
   Smartphone, Sparkles, Tag, Trash2, UserRound, UsersRound, Wrench, X
 } from 'lucide-react';
@@ -24,6 +24,36 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 
 const queryClient = new QueryClient();
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+type DemoRole = 'admin' | 'worker';
+type DemoSession = { role: DemoRole; email: string; name: string };
+const DEMO_SESSION_KEY = 'seiiki-demo-session';
+const DEMO_ACCOUNTS: Record<DemoRole, DemoSession & { password: string; label: string; description: string }> = {
+  admin: {
+    role: 'admin',
+    email: 'admin@seiiki.id',
+    password: 'admin123',
+    name: 'Ayu Pratami',
+    label: 'Admin operasional',
+    description: 'Kelola permintaan, transaksi, pengguna, dan tim lapangan.',
+  },
+  worker: {
+    role: 'worker',
+    email: 'pekerja@seiiki.id',
+    password: 'pekerja123',
+    name: 'Budi Santoso',
+    label: 'Pekerja lapangan',
+    description: 'Lihat kunjungan, kirim laporan, dan ajukan peralatan.',
+  },
+};
+function getDemoSession(): DemoSession | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const value = JSON.parse(window.localStorage.getItem(DEMO_SESSION_KEY) || 'null') as DemoSession | null;
+    return value && (value.role === 'admin' || value.role === 'worker') ? value : null;
+  } catch {
+    return null;
+  }
+}
 const rupiah = (n = 0) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n);
 const date = (value: string) => new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(value));
 const time = (value: string) => new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
@@ -38,6 +68,60 @@ function Logo({ inverse = false }: { inverse?: boolean }) {
   return <Link href="/" className={`brand-logo-link ${inverse ? 'text-sidebar-foreground' : 'text-foreground'}`} data-testid="link-logo">
     <span className={`brand-logo-frame ${inverse ? 'brand-logo-frame-inverse' : ''}`}><img className="brand-logo" src={`${basePath}/brand-logo.png`} alt="SEIIKI — Solusi Energi Kelistrikan Indonesia" /></span>
   </Link>;
+}
+function DemoLogin() {
+  const [, setLocation] = useLocation();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const fillDemo = (role: DemoRole) => {
+    const account = DEMO_ACCOUNTS[role];
+    setEmail(account.email);
+    setPassword(account.password);
+    setError('');
+  };
+  const signIn = (event: React.FormEvent) => {
+    event.preventDefault();
+    const account = Object.values(DEMO_ACCOUNTS).find((candidate) => candidate.email === email.trim().toLowerCase() && candidate.password === password);
+    if (!account) {
+      setError('Email atau kata sandi demo belum sesuai. Pilih salah satu akun di bawah.');
+      return;
+    }
+    window.localStorage.setItem(DEMO_SESSION_KEY, JSON.stringify({ role: account.role, email: account.email, name: account.name }));
+    setLocation(account.role === 'admin' ? '/admin' : '/worker');
+  };
+  return <div className="auth-page app-noise min-h-[100dvh]">
+    <header className="auth-header"><Logo /><Link href="/" className="btn btn-outline !px-3 !py-2 text-xs" data-testid="link-back-home">Kembali ke beranda</Link></header>
+    <main className="auth-content">
+      <section className="auth-intro rise-in">
+        <div className="eyebrow"><span className="status-dot bg-accent" /> Akses ruang kerja SEIIKI</div>
+        <h1>Masuk ke<br /><em>ruang tim.</em></h1>
+        <p>Gunakan salah satu akun demo untuk melihat alur kerja admin atau pekerja lapangan.</p>
+        <div className="auth-note"><ShieldCheck size={17} /><span><strong>Mode demo aman</strong><small>Data login hanya disimpan di browser ini.</small></span></div>
+      </section>
+      <section className="auth-card panel rise-in delay-1">
+        <div className="panel-head"><div><div className="eyebrow">Login demo</div><h3>Selamat datang kembali</h3><p className="text-xs text-muted-foreground">Masukkan kredensial demo untuk melanjutkan.</p></div><LogIn size={19} className="text-accent" /></div>
+        <form onSubmit={signIn} className="space-y-4">
+          <Field label="Email"><input type="email" autoComplete="email" required value={email} onChange={(event) => { setEmail(event.target.value); setError(''); }} placeholder="nama@seiiki.id" data-testid="input-demo-email" /></Field>
+          <Field label="Kata sandi"><input type="password" autoComplete="current-password" required value={password} onChange={(event) => { setPassword(event.target.value); setError(''); }} placeholder="Masukkan kata sandi" data-testid="input-demo-password" /></Field>
+          {error && <div className="notice notice-error" role="alert"><X size={15} /> {error}</div>}
+          <Button type="submit" className="w-full justify-center" data-testid="button-demo-login">Masuk ke dashboard <ArrowRight size={16} /></Button>
+        </form>
+        <div className="demo-divider"><span>atau pilih akun demo</span></div>
+        <div className="demo-account-grid">{Object.values(DEMO_ACCOUNTS).map((account) => <button type="button" key={account.role} className="demo-account" onClick={() => fillDemo(account.role)} data-testid={`button-demo-${account.role}`}><span className={`demo-account-icon demo-account-${account.role}`}>{account.role === 'admin' ? <ShieldCheck size={17} /> : <Wrench size={17} />}</span><span className="text-left"><strong>{account.label}</strong><small>{account.email}</small><small>{account.description}</small></span><ArrowRight size={15} className="ml-auto text-muted-foreground" /></button>)}</div>
+        <p className="auth-credentials">Admin: <strong>admin123</strong> · Pekerja: <strong>pekerja123</strong></p>
+      </section>
+    </main>
+  </div>;
+}
+function AuthGate({ role, children }: { role: DemoRole; children: React.ReactNode }) {
+  const [, setLocation] = useLocation();
+  const session = getDemoSession();
+  useEffect(() => {
+    if (!session || session.role !== role) setLocation('/login');
+  }, [role, session?.role, setLocation]);
+  if (!session || session.role !== role) return <div className="min-h-[100dvh] bg-background" />;
+  return <>{children}</>;
 }
 function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
   return <label className="block space-y-1.5"><span className="text-xs font-bold text-foreground/75">{label}</span>{children}{hint && <span className="block text-[11px] text-muted-foreground">{hint}</span>}</label>;
@@ -67,10 +151,15 @@ const workerNav = [
 
 function AppShell({ children, role = 'admin' }: { children: React.ReactNode; role?: 'admin' | 'worker' }) {
   const [menu, setMenu] = useState(false);
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const nav = role === 'admin' ? adminNav : workerNav;
-  const displayName = role === 'admin' ? 'Admin SEIIKI' : 'Pekerja lapangan';
+  const session = getDemoSession();
+  const displayName = session?.name || (role === 'admin' ? 'Admin SEIIKI' : 'Pekerja lapangan');
   const initials = displayName.split(/\s+/).map((value) => value[0]).join('').slice(0, 2).toUpperCase();
+  const logout = () => {
+    window.localStorage.removeItem(DEMO_SESSION_KEY);
+    setLocation('/login');
+  };
   return <div className="app-noise min-h-[100dvh] bg-background">
     <aside className={`sidebar ${menu ? 'sidebar-open' : ''}`}>
       <div className="flex items-center justify-between"><Logo inverse /><button className="sidebar-close md:hidden" onClick={() => setMenu(false)} data-testid="button-close-menu"><X size={18} /></button></div>
@@ -78,7 +167,8 @@ function AppShell({ children, role = 'admin' }: { children: React.ReactNode; rol
       <nav className="mt-3 space-y-1">{nav.map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={() => setMenu(false)} className={`side-link ${location === href ? 'side-link-active' : ''}`} data-testid={`link-${label.toLowerCase().replaceAll(' ', '-')}`}><Icon size={17} /><span>{label}</span>{href === '/admin/requests' && <span className="ml-auto grid size-5 place-items-center rounded-full bg-primary text-[10px] font-extrabold text-primary-foreground">4</span>}</Link>)}</nav>
       <div className="sidebar-bottom">
         <div className="rounded-2xl border border-sidebar-border bg-sidebar-accent/60 p-4"><div className="mb-2 flex items-center gap-2 text-primary"><Radio size={14} /><span className="text-[11px] font-bold uppercase tracking-widest">Tim aktif</span></div><p className="text-xs leading-5 text-sidebar-foreground/70">Semua layanan lapangan terpantau.</p><div className="mt-3 flex items-center gap-2 text-xs text-sidebar-foreground/50"><span className="status-dot bg-emerald-400" /> Sistem normal</div></div>
-        <Link href={role === 'admin' ? '/worker' : '/admin'} className="side-link mt-3 text-sidebar-foreground/55" data-testid="link-switch-role"><LogIn size={17} /><span>{role === 'admin' ? 'Buka ruang pekerja' : 'Buka ruang admin'}</span></Link>
+       <Link href="/login" className="side-link mt-3 text-sidebar-foreground/55" data-testid="link-switch-role"><LogIn size={17} /><span>Ganti akun demo</span></Link>
+       <button type="button" onClick={logout} className="side-link mt-1 w-full text-sidebar-foreground/55" data-testid="button-demo-logout"><LogOut size={17} /><span>Keluar</span></button>
       </div>
     </aside>
     <main className="md:pl-[264px]">
@@ -262,8 +352,16 @@ function WorkerEquipment() {
 
 function NotFound() { return <div className="grid min-h-[100dvh] place-items-center bg-background p-6 text-center"><div><Logo /><h1 className="mt-10">Halaman tidak ditemukan</h1><p className="mt-2 text-sm text-muted-foreground">Rute ini belum tersedia di ruang kerja SEIIKI.</p><Link href="/" className="btn btn-primary mt-6 inline-flex" data-testid="link-not-found-home">Kembali ke beranda</Link></div></div>; }
 
+function AdminHomeRoute() { return <AuthGate role="admin"><AdminHome /></AuthGate>; }
+function AdminRequestsRoute() { return <AuthGate role="admin"><AdminRequests /></AuthGate>; }
+function AdminTransactionsRoute() { return <AuthGate role="admin"><AdminTransactions /></AuthGate>; }
+function AdminEquipmentRoute() { return <AuthGate role="admin"><AdminEquipment /></AuthGate>; }
+function AdminUsersRoute() { return <AuthGate role="admin"><AdminUsers /></AuthGate>; }
+function WorkerHomeRoute() { return <AuthGate role="worker"><WorkerHome /></AuthGate>; }
+function WorkerEquipmentRoute() { return <AuthGate role="worker"><WorkerEquipment /></AuthGate>; }
+function WorkerReportsRoute() { return <AuthGate role="worker"><WorkerReports /></AuthGate>; }
 function AppRoutes() {
-  return <ErrorBoundary resetKey={window.location.pathname}><Switch><Route path="/" component={CustomerHome} /><Route path="/admin" component={AdminHome} /><Route path="/admin/requests" component={AdminRequests} /><Route path="/admin/transactions" component={AdminTransactions} /><Route path="/admin/equipment" component={AdminEquipment} /><Route path="/admin/users" component={AdminUsers} /><Route path="/worker" component={WorkerHome} /><Route path="/worker/equipment" component={WorkerEquipment} /><Route path="/worker/reports" component={WorkerReports} /><Route component={NotFound} /></Switch></ErrorBoundary>;
+  return <ErrorBoundary resetKey={window.location.pathname}><Switch><Route path="/" component={CustomerHome} /><Route path="/login" component={DemoLogin} /><Route path="/admin" component={AdminHomeRoute} /><Route path="/admin/requests" component={AdminRequestsRoute} /><Route path="/admin/transactions" component={AdminTransactionsRoute} /><Route path="/admin/equipment" component={AdminEquipmentRoute} /><Route path="/admin/users" component={AdminUsersRoute} /><Route path="/worker" component={WorkerHomeRoute} /><Route path="/worker/equipment" component={WorkerEquipmentRoute} /><Route path="/worker/reports" component={WorkerReportsRoute} /><Route component={NotFound} /></Switch></ErrorBoundary>;
 }
 
 function App() {
