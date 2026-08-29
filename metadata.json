@@ -1,0 +1,6 @@
+{
+  "name": "SEIIKI Listrik",
+  "description": "Layanan perbaikan, instalasi, dan pemeriksaan listrik SEIIKI dengan pemesanan kunjungan, pembayaran simulasi, penugasan teknisi, dan laporan lapangan.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

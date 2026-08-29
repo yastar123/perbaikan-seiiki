@@ -1,7 +1,9 @@
-import { and, count, desc, eq, gte, lte, sql, sum } from "drizzle-orm";
+import { and, count, desc, asc, eq, gte, lte, sql, sum } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import {
+  bookingConfigTable,
+  bookingServicesTable,
   dashboardUsersTable,
   equipmentRequestsTable,
   fieldReportsTable,
@@ -128,12 +130,22 @@ router.post("/requests", async (req, res): Promise<void> => {
     return;
   }
 
+  let currentVisitFee = 25000;
+  try {
+    const config = (await db.select().from(bookingConfigTable).limit(1))[0];
+    if (config?.visitFee) {
+      currentVisitFee = config.visitFee;
+    }
+  } catch (e) {
+    // fallback to 25000
+  }
+
   const [request] = await db
     .insert(serviceRequestsTable)
     .values({
       ...parsed.data,
       code: `SEI-${Date.now().toString().slice(-8)}`,
-      visitFee: 25000,
+      visitFee: currentVisitFee,
       status: "waiting_payment",
       paymentStatus: "unpaid",
     })
@@ -455,6 +467,40 @@ router.post("/requests/:id/reports", async (req, res): Promise<void> => {
   res.status(201).json(report);
 });
 
+router.get("/field-reports", async (_req, res): Promise<void> => {
+  const reports = await db
+    .select({
+      id: fieldReportsTable.id,
+      requestId: fieldReportsTable.requestId,
+      notes: fieldReportsTable.notes,
+      media: fieldReportsTable.media,
+      createdAt: fieldReportsTable.createdAt,
+      requestCode: serviceRequestsTable.code,
+      customerName: serviceRequestsTable.customerName,
+      whatsapp: serviceRequestsTable.whatsapp,
+      serviceType: serviceRequestsTable.serviceType,
+      address: serviceRequestsTable.address,
+      latitude: serviceRequestsTable.latitude,
+      longitude: serviceRequestsTable.longitude,
+      assignedWorkerId: serviceRequestsTable.assignedWorkerId,
+      assignedWorkerName: dashboardUsersTable.name,
+      requestStatus: serviceRequestsTable.status,
+      repairCost: serviceRequestsTable.repairCost,
+    })
+    .from(fieldReportsTable)
+    .leftJoin(
+      serviceRequestsTable,
+      eq(fieldReportsTable.requestId, serviceRequestsTable.id),
+    )
+    .leftJoin(
+      dashboardUsersTable,
+      eq(serviceRequestsTable.assignedWorkerId, dashboardUsersTable.id),
+    )
+    .orderBy(desc(fieldReportsTable.createdAt));
+
+  res.json(reports);
+});
+
 router.get("/users", async (_req, res): Promise<void> => {
   const users = await db
     .select()
@@ -507,6 +553,190 @@ router.delete("/users/:id", async (req, res): Promise<void> => {
     .returning();
   if (!user) {
     res.status(404).json({ error: "User not found" });
+    return;
+  }
+  res.sendStatus(204);
+});
+
+// ==========================================
+// Booking Component & Services Configuration CRUD
+// ==========================================
+
+router.get("/booking-config", async (_req, res): Promise<void> => {
+  let [config] = await db.select().from(bookingConfigTable).limit(1);
+  if (!config) {
+    [config] = await db
+      .insert(bookingConfigTable)
+      .values({
+        stepNumber: "01",
+        title: "Ajukan kunjungan",
+        subtitle: "Isi detail singkat, kami lanjutkan lewat WhatsApp.",
+        visitFee: 25000,
+        visitFeeNote: "dibayar di muka",
+        buttonText: "Lanjut ke pembayaran",
+        adminWhatsapp: "6281112345678",
+        namePlaceholder: "Contoh: Sinta Rahma",
+        phonePlaceholder: "08xx xxxx xxxx",
+        phoneHint: "Gunakan nomor yang aktif menerima pesan",
+        addressPlaceholder: "Alamat lengkap, patokan, dan lantai bila ada",
+        gpsButtonText: "Ambil lokasi GPS",
+        gpsHint: "Bagikan lokasi agar teknisi menemukan alamat dengan tepat",
+        notesPlaceholder: "Keluhan, waktu yang diinginkan...",
+        notesHint: "Opsional",
+        enableGps: 1,
+        enableNotes: 1,
+      })
+      .returning();
+  }
+  res.json(config);
+});
+
+router.put("/booking-config", async (req, res): Promise<void> => {
+  const body = req.body;
+  let [config] = await db.select().from(bookingConfigTable).limit(1);
+  if (!config) {
+    [config] = await db
+      .insert(bookingConfigTable)
+      .values({
+        ...body,
+        updatedAt: new Date(),
+      })
+      .returning();
+  } else {
+    [config] = await db
+      .update(bookingConfigTable)
+      .set({
+        ...body,
+        updatedAt: new Date(),
+      })
+      .where(eq(bookingConfigTable.id, config.id))
+      .returning();
+  }
+  res.json(config);
+});
+
+router.get("/booking-services", async (_req, res): Promise<void> => {
+  let services = await db
+    .select()
+    .from(bookingServicesTable)
+    .orderBy(asc(bookingServicesTable.sortOrder), asc(bookingServicesTable.id));
+
+  if (services.length === 0) {
+    services = await db
+      .insert(bookingServicesTable)
+      .values([
+        {
+          name: "Perbaikan listrik rumah",
+          category: "Perbaikan",
+          description: "Penanganan korsleting, MCB trip / sering jeglek, kabel panas, dan stop kontak mati.",
+          estimatedPrice: 75000,
+          estimatedDuration: "1 - 2 Jam",
+          icon: "Wrench",
+          isActive: 1,
+          sortOrder: 1,
+        },
+        {
+          name: "Instalasi titik listrik",
+          category: "Pemasangan",
+          description: "Penambahan stop kontak baru, saklar lampu, kabel rapi, dan jalur peralatan elektronik.",
+          estimatedPrice: 60000,
+          estimatedDuration: "1 - 3 Jam",
+          icon: "Plus",
+          isActive: 1,
+          sortOrder: 2,
+        },
+        {
+          name: "Pemeriksaan instalasi",
+          category: "Pemeriksaan",
+          description: "Audit menyeluruh kelaikan instalasi listrik, kebocoran arus grounding, dan beban trafo/MCB.",
+          estimatedPrice: 100000,
+          estimatedDuration: "2 - 3 Jam",
+          icon: "ShieldCheck",
+          isActive: 1,
+          sortOrder: 3,
+        },
+        {
+          name: "Perbaikan panel / MCB",
+          category: "Panel & Daya",
+          description: "Penggantian MCB rusak, upgrade pembagian grup sirkuit panel, dan instalasi ELCB/RCCB anti-setrum.",
+          estimatedPrice: 120000,
+          estimatedDuration: "1 - 2 Jam",
+          icon: "Activity",
+          isActive: 1,
+          sortOrder: 4,
+        },
+      ])
+      .returning();
+  }
+
+  res.json(services);
+});
+
+router.post("/booking-services", async (req, res): Promise<void> => {
+  const { name, category, description, estimatedPrice, estimatedDuration, icon, isActive, sortOrder } = req.body;
+  if (!name || typeof name !== "string") {
+    res.status(400).json({ error: "Nama layanan wajib diisi" });
+    return;
+  }
+  const [created] = await db
+    .insert(bookingServicesTable)
+    .values({
+      name: name.trim(),
+      category: category?.trim() || "Umum",
+      description: description?.trim() || null,
+      estimatedPrice: estimatedPrice ? Number(estimatedPrice) : null,
+      estimatedDuration: estimatedDuration?.trim() || null,
+      icon: icon || "Wrench",
+      isActive: isActive !== undefined ? Number(isActive) : 1,
+      sortOrder: sortOrder !== undefined ? Number(sortOrder) : 0,
+    })
+    .returning();
+  res.status(201).json(created);
+});
+
+router.put("/booking-services/:id", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!id || Number.isNaN(id)) {
+    res.status(400).json({ error: "ID layanan tidak valid" });
+    return;
+  }
+  const { name, category, description, estimatedPrice, estimatedDuration, icon, isActive, sortOrder } = req.body;
+  const updateData: any = {};
+  if (name !== undefined) updateData.name = name.trim();
+  if (category !== undefined) updateData.category = category.trim();
+  if (description !== undefined) updateData.description = description;
+  if (estimatedPrice !== undefined) updateData.estimatedPrice = estimatedPrice ? Number(estimatedPrice) : null;
+  if (estimatedDuration !== undefined) updateData.estimatedDuration = estimatedDuration;
+  if (icon !== undefined) updateData.icon = icon;
+  if (isActive !== undefined) updateData.isActive = Number(isActive);
+  if (sortOrder !== undefined) updateData.sortOrder = Number(sortOrder);
+
+  const [updated] = await db
+    .update(bookingServicesTable)
+    .set(updateData)
+    .where(eq(bookingServicesTable.id, id))
+    .returning();
+
+  if (!updated) {
+    res.status(404).json({ error: "Layanan tidak ditemukan" });
+    return;
+  }
+  res.json(updated);
+});
+
+router.delete("/booking-services/:id", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!id || Number.isNaN(id)) {
+    res.status(400).json({ error: "ID layanan tidak valid" });
+    return;
+  }
+  const [deleted] = await db
+    .delete(bookingServicesTable)
+    .where(eq(bookingServicesTable.id, id))
+    .returning();
+
+  if (!deleted) {
+    res.status(404).json({ error: "Layanan tidak ditemukan" });
     return;
   }
   res.sendStatus(204);

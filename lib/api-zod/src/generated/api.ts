@@ -5,7 +5,12 @@
  * API for SEIIKI electrical service operations
  * OpenAPI spec version: 0.1.0
  */
-import * as zod from 'zod';
+import * as _zod from 'zod';
+
+const zod = {
+  ..._zod,
+  int: () => _zod.number().int(),
+};
 
 
 /**

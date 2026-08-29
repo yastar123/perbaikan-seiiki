@@ -1,6 +1,22 @@
 <!DOCTYPE html>
 <html lang="id">
   <head>
+    <script>
+      try {
+        if (typeof window !== 'undefined') {
+          var _origFetch = window.fetch ? window.fetch.bind(window) : undefined;
+          var _fetch = _origFetch;
+          Object.defineProperty(window, 'fetch', {
+            get: function () { return _fetch; },
+            set: function (fn) { _fetch = fn; },
+            configurable: true,
+            enumerable: true
+          });
+        }
+      } catch (e) {
+        /* Ignore if already configurable */
+      }
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <title>SEIIKI — Solusi Energi Kelistrikan Indonesia</title>
