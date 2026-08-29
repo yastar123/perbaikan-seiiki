@@ -3,13 +3,21 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: API for SEIIKI electrical service operations
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: requests
+    description: Customer service requests
+  - name: operations
+    description: Admin and field operations
+  - name: transactions
+    description: Visit and repair payments
+  - name: users
+    description: Admin user management
 paths:
   /healthz:
     get:
@@ -24,7 +32,307 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /requests:
+    get:
+      operationId: listServiceRequests
+      tags: [requests]
+      summary: List service requests
+      parameters:
+        - $ref: "#/components/parameters/StatusQuery"
+        - $ref: "#/components/parameters/DateFromQuery"
+        - $ref: "#/components/parameters/DateToQuery"
+      responses:
+        "200":
+          description: Service request list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ServiceRequest"
+    post:
+      operationId: createServiceRequest
+      tags: [requests]
+      summary: Create a customer service request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServiceRequestInput"
+      responses:
+        "201":
+          description: Created service request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceRequest"
+  /requests/{id}:
+    patch:
+      operationId: updateServiceRequest
+      tags: [requests]
+      summary: Update a service request workflow
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServiceRequestUpdate"
+      responses:
+        "200":
+          description: Updated request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceRequest"
+        "404":
+          description: Request not found
+    delete:
+      operationId: deleteServiceRequest
+      tags: [requests]
+      summary: Delete a service request
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "204":
+          description: Request deleted
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [operations]
+      summary: Get operations dashboard summary
+      responses:
+        "200":
+          description: Dashboard totals and recent activity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+  /workers:
+    get:
+      operationId: listWorkers
+      tags: [operations]
+      summary: List available workers
+      responses:
+        "200":
+          description: Worker list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Worker"
+  /payments/{requestId}:
+    post:
+      operationId: createVisitPayment
+      tags: [transactions]
+      summary: Simulate visit fee payment
+      parameters:
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentInput"
+      responses:
+        "201":
+          description: Payment recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+  /transactions:
+    get:
+      operationId: listTransactions
+      tags: [transactions]
+      summary: List transactions with date filters
+      parameters:
+        - name: period
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [all, week, month, custom]
+            default: all
+        - $ref: "#/components/parameters/DateFromQuery"
+        - $ref: "#/components/parameters/DateToQuery"
+      responses:
+        "200":
+          description: Transaction list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Transaction"
+  /equipment-requests:
+    get:
+      operationId: listEquipmentRequests
+      tags: [operations]
+      summary: List equipment requests
+      responses:
+        "200":
+          description: Equipment request list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EquipmentRequest"
+    post:
+      operationId: createEquipmentRequest
+      tags: [operations]
+      summary: Create a worker equipment request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EquipmentRequestInput"
+      responses:
+        "201":
+          description: Created equipment request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EquipmentRequest"
+  /equipment-requests/{id}:
+    patch:
+      operationId: updateEquipmentRequest
+      tags: [operations]
+      summary: Review an equipment request
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EquipmentRequestUpdate"
+      responses:
+        "200":
+          description: Updated equipment request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EquipmentRequest"
+  /requests/{id}/reports:
+    post:
+      operationId: createFieldReport
+      tags: [operations]
+      summary: Submit a field report
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FieldReportInput"
+      responses:
+        "201":
+          description: Created field report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FieldReport"
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List dashboard users
+      responses:
+        "200":
+          description: User list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create a dashboard user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserInput"
+      responses:
+        "201":
+          description: Created dashboard user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+  /users/{id}:
+    patch:
+      operationId: updateUser
+      tags: [users]
+      summary: Update a dashboard user
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdate"
+      responses:
+        "200":
+          description: Updated dashboard user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    delete:
+      operationId: deleteUser
+      tags: [users]
+      summary: Delete a dashboard user
+      parameters:
+        - $ref: "#/components/parameters/IdPath"
+      responses:
+        "204":
+          description: User deleted
 components:
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+    StatusQuery:
+      name: status
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [all, waiting_payment, paid, assigned, on_site, waiting_approval, in_progress, completed, cancelled]
+        default: all
+    DateFromQuery:
+      name: from
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date
+    DateToQuery:
+      name: to
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date
   schemas:
     HealthStatus:
       type: object
@@ -33,4 +341,190 @@ components:
           type: string
       required:
         - status
+    Worker:
+      type: object
+      required: [id, name, phone, specialty, status]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        phone: { type: string }
+        specialty: { type: string }
+        status:
+          type: string
+          enum: [available, assigned, off]
+    ServiceRequest:
+      type: object
+      required: [id, code, customerName, whatsapp, address, latitude, longitude, serviceType, status, visitFee, createdAt]
+      properties:
+        id: { type: integer }
+        code: { type: string }
+        customerName: { type: string }
+        whatsapp: { type: string }
+        address: { type: string }
+        latitude: { type: number }
+        longitude: { type: number }
+        serviceType: { type: string }
+        notes: { type: ["string", "null"] }
+        status:
+          type: string
+          enum: [waiting_payment, paid, assigned, on_site, waiting_approval, in_progress, completed, cancelled]
+        paymentStatus:
+          type: string
+          enum: [unpaid, paid]
+        visitFee: { type: number }
+        repairCost: { type: ["number", "null"] }
+        assignedWorkerId: { type: ["integer", "null"] }
+        assignedWorkerName: { type: ["string", "null"] }
+        reportCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+    ServiceRequestInput:
+      type: object
+      required: [customerName, whatsapp, address, latitude, longitude, serviceType]
+      properties:
+        customerName: { type: string, minLength: 2 }
+        whatsapp: { type: string, minLength: 8 }
+        address: { type: string, minLength: 4 }
+        latitude: { type: number }
+        longitude: { type: number }
+        serviceType: { type: string }
+        notes: { type: string }
+    ServiceRequestUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [waiting_payment, paid, assigned, on_site, waiting_approval, in_progress, completed, cancelled]
+        assignedWorkerId: { type: ["integer", "null"] }
+        repairCost: { type: ["number", "null"] }
+        paymentStatus:
+          type: string
+          enum: [unpaid, paid]
+    PaymentInput:
+      type: object
+      required: [method]
+      properties:
+        method:
+          type: string
+          enum: [qris, bank_transfer, e_wallet]
+    Transaction:
+      type: object
+      required: [id, requestId, requestCode, customerName, type, amount, status, createdAt]
+      properties:
+        id: { type: integer }
+        requestId: { type: integer }
+        requestCode: { type: string }
+        customerName: { type: string }
+        type:
+          type: string
+          enum: [visit_fee, repair_fee]
+        amount: { type: number }
+        status:
+          type: string
+          enum: [paid, pending]
+        createdAt: { type: string, format: date-time }
+    EquipmentRequest:
+      type: object
+      required: [id, workerId, workerName, item, quantity, urgency, status, createdAt]
+      properties:
+        id: { type: integer }
+        workerId: { type: integer }
+        workerName: { type: string }
+        item: { type: string }
+        quantity: { type: integer }
+        urgency:
+          type: string
+          enum: [normal, urgent]
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        createdAt: { type: string, format: date-time }
+    EquipmentRequestInput:
+      type: object
+      required: [workerId, item, quantity, urgency]
+      properties:
+        workerId: { type: integer }
+        item: { type: string }
+        quantity: { type: integer, minimum: 1 }
+        urgency:
+          type: string
+          enum: [normal, urgent]
+    EquipmentRequestUpdate:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+    FieldReport:
+      type: object
+      required: [id, requestId, notes, media, createdAt]
+      properties:
+        id: { type: integer }
+        requestId: { type: integer }
+        notes: { type: string }
+        media:
+          type: array
+          items: { type: string }
+        createdAt: { type: string, format: date-time }
+    FieldReportInput:
+      type: object
+      required: [notes, media]
+      properties:
+        notes: { type: string }
+        media:
+          type: array
+          items: { type: string }
+    DashboardSummary:
+      type: object
+      required: [totalRequests, pendingAssignment, onSite, completed, visitRevenue, repairRevenue, recentActivity]
+      properties:
+        totalRequests: { type: integer }
+        pendingAssignment: { type: integer }
+        onSite: { type: integer }
+        completed: { type: integer }
+        visitRevenue: { type: number }
+        repairRevenue: { type: number }
+        recentActivity:
+          type: array
+          items:
+            type: object
+            required: [label, detail, time]
+            properties:
+              label: { type: string }
+              detail: { type: string }
+              time: { type: string }
+    User:
+      type: object
+      required: [id, name, phone, role, status]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        phone: { type: string }
+        role:
+          type: string
+          enum: [admin, worker]
+        status:
+          type: string
+          enum: [active, inactive]
+    UserInput:
+      type: object
+      required: [name, phone, role]
+      properties:
+        name: { type: string }
+        phone: { type: string }
+        role:
+          type: string
+          enum: [admin, worker]
+        specialty: { type: string }
+    UserUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        phone: { type: string }
+        role:
+          type: string
+          enum: [admin, worker]
+        status:
+          type: string
+          enum: [active, inactive]
 

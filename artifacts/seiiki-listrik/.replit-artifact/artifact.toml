@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "SEIIKI — Solusi Energi Kelistrikan Indonesia"
+description = "Platform layanan perbaikan dan instalasi listrik SEIIKI untuk pelanggan, admin, dan pekerja lapangan dengan alur permintaan, pembayaran kunjungan, penugasan, pelaporan, dan riwayat transaksi."
+version = "1.0.0"
+id = "artifacts/seiiki-listrik"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22402
+
+[services.development]
+run = "pnpm --filter @workspace/seiiki-listrik run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/seiiki-listrik", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/seiiki-listrik/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22402"
+BASE_PATH = "/"
