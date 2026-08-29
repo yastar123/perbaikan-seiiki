@@ -156,13 +156,26 @@ function AppShell({ children, role = 'admin' }: { children: React.ReactNode; rol
   const session = getDemoSession();
   const displayName = session?.name || (role === 'admin' ? 'Admin SEIIKI' : 'Pekerja lapangan');
   const initials = displayName.split(/\s+/).map((value) => value[0]).join('').slice(0, 2).toUpperCase();
+  useEffect(() => {
+    if (!menu) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenu(false);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', closeOnEscape);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [menu]);
   const logout = () => {
     window.localStorage.removeItem(DEMO_SESSION_KEY);
     setLocation('/login');
   };
   return <div className="app-noise min-h-[100dvh] bg-background">
     <aside className={`sidebar ${menu ? 'sidebar-open' : ''}`}>
-      <div className="flex items-center justify-between"><Logo inverse /><button className="sidebar-close md:hidden" onClick={() => setMenu(false)} data-testid="button-close-menu"><X size={18} /></button></div>
+      <div className="flex items-center justify-between"><Logo inverse /><button className="sidebar-close" aria-label="Tutup menu navigasi" onClick={() => setMenu(false)} data-testid="button-close-menu"><X size={18} /></button></div>
       <div className="mt-10 px-3 text-[10px] font-extrabold uppercase tracking-[.18em] text-sidebar-foreground/40">{role === 'admin' ? 'Ruang kendali' : 'Ruang pekerja'}</div>
       <nav className="mt-3 space-y-1">{nav.map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={() => setMenu(false)} className={`side-link ${location === href ? 'side-link-active' : ''}`} data-testid={`link-${label.toLowerCase().replaceAll(' ', '-')}`}><Icon size={17} /><span>{label}</span>{href === '/admin/requests' && <span className="ml-auto grid size-5 place-items-center rounded-full bg-primary text-[10px] font-extrabold text-primary-foreground">4</span>}</Link>)}</nav>
       <div className="sidebar-bottom">
@@ -171,8 +184,9 @@ function AppShell({ children, role = 'admin' }: { children: React.ReactNode; rol
        <button type="button" onClick={logout} className="side-link mt-1 w-full text-sidebar-foreground/55" data-testid="button-demo-logout"><LogOut size={17} /><span>Keluar</span></button>
       </div>
     </aside>
-    <main className="md:pl-[264px]">
-       <header className="topbar"><button className="menu-trigger md:hidden" onClick={() => setMenu(true)} data-testid="button-open-menu"><Menu size={20} /></button><div className="hidden text-sm text-muted-foreground md:block">{role === 'admin' ? 'Operasional / ' : 'Lapangan / '}<strong className="text-foreground">{pageName(location)}</strong></div><div className="ml-auto flex items-center gap-3"><button className="icon-button" data-testid="button-notifications"><Bell size={17} /><i /></button><span className="hidden h-5 w-px bg-border sm:block" /><div className="flex items-center gap-2.5"><span className="avatar">{initials}</span><div className="hidden leading-tight sm:block"><strong className="block text-xs">{displayName}</strong><span className="text-[10px] text-muted-foreground">{role === 'admin' ? 'Administrator' : 'Teknisi lapangan'}</span></div><ChevronDown size={14} className="text-muted-foreground" /></div></div></header>
+     {menu && <button type="button" className="sidebar-overlay" aria-label="Tutup menu navigasi" onClick={() => setMenu(false)} data-testid="button-overlay-close-menu" />}
+     <main className="md:pl-[264px]">
+        <header className="topbar"><button className="menu-trigger" aria-label="Buka menu navigasi" aria-expanded={menu} onClick={() => setMenu(true)} data-testid="button-open-menu"><Menu size={20} /></button><div className="hidden text-sm text-muted-foreground md:block">{role === 'admin' ? 'Operasional / ' : 'Lapangan / '}<strong className="text-foreground">{pageName(location)}</strong></div><div className="ml-auto flex items-center gap-3"><button className="icon-button" aria-label="Notifikasi" data-testid="button-notifications"><Bell size={17} /><i /></button><span className="hidden h-5 w-px bg-border sm:block" /><div className="flex items-center gap-2.5"><span className="avatar">{initials}</span><div className="hidden leading-tight sm:block"><strong className="block text-xs">{displayName}</strong><span className="text-[10px] text-muted-foreground">{role === 'admin' ? 'Administrator' : 'Teknisi lapangan'}</span></div><ChevronDown size={14} className="text-muted-foreground" /></div></div></header>
       <div className="page-wrap">{children}</div>
     </main>
   </div>;

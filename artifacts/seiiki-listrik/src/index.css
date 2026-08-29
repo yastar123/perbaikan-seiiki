@@ -1749,6 +1749,575 @@ td:last-child {
   }
 }
 
+/* Responsive foundation
+   The dashboard uses one shared tablet cut-over so navigation, grids and
+   content all change mode together. Dense records keep their table semantics
+   and scroll inside their own viewport rather than widening the page. */
+html,
+body,
+#root {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  overflow-wrap: anywhere;
+}
+
+img,
+svg {
+  max-width: 100%;
+}
+
+svg {
+  flex: 0 0 auto;
+}
+
+input,
+textarea,
+select,
+button {
+  min-width: 0;
+}
+
+textarea {
+  overflow-wrap: anywhere;
+}
+
+.menu-trigger {
+  display: none;
+}
+
+.sidebar-close {
+  display: none;
+}
+
+.sidebar-overlay {
+  display: none;
+}
+
+.panel-head > * {
+  min-width: 0;
+}
+
+.panel-head h3,
+.panel-head p,
+.activity-item strong,
+.activity-item small,
+.request-detail strong,
+.success-panel p,
+.report-tip span,
+.worker-option strong,
+.worker-option small,
+.equipment-row strong,
+.equipment-row p {
+  overflow-wrap: anywhere;
+}
+
+.table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-color: hsl(var(--border)) transparent;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-scroll table {
+  min-width: 720px;
+}
+
+.table-scroll th,
+.table-scroll td {
+  white-space: normal;
+}
+
+.filter-bar > * {
+  min-width: 0;
+}
+
+.search-field {
+  width: min(100%, 280px);
+  flex: 1 1 220px;
+}
+
+.notice {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  line-height: 1.45;
+}
+
+.notice > svg {
+  margin-top: 2px;
+}
+
+.notice button {
+  flex: 0 0 auto;
+}
+
+.modal-backdrop {
+  align-items: center;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.modal {
+  min-width: 0;
+}
+
+.modal > div:last-child {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.modal > div:last-child .btn {
+  justify-content: center;
+}
+
+.location-coordinates {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1023px) {
+  .sidebar {
+    z-index: 40;
+    transform: translateX(-105%);
+    visibility: hidden;
+    box-shadow: 18px 0 40px hsl(var(--foreground) / 0.2);
+    transition: transform 0.22s ease, visibility 0s linear 0.22s;
+  }
+
+  .sidebar.sidebar-open {
+    transform: translateX(0);
+    visibility: visible;
+    transition-delay: 0s;
+  }
+
+  .sidebar-close,
+  .menu-trigger {
+    display: grid;
+  }
+
+  .sidebar-overlay {
+    position: fixed;
+    z-index: 35;
+    inset: 0;
+    display: block;
+    border: 0;
+    background: hsl(var(--foreground) / 0.38);
+    cursor: pointer;
+  }
+
+  main.md\:pl-\[264px\] {
+    padding-left: 0 !important;
+  }
+
+  .customer-hero,
+  .customer-assurance,
+  .two-col,
+  .report-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .customer-hero {
+    min-height: auto;
+    padding-block: 54px 72px;
+  }
+
+  .customer-assurance {
+    gap: 28px;
+  }
+
+  .auth-content {
+    grid-template-columns: 1fr;
+    min-height: auto;
+    gap: 36px;
+    padding-block: 48px 72px;
+  }
+
+  .auth-intro {
+    max-width: 650px;
+  }
+
+  .auth-card {
+    justify-self: start;
+    max-width: 560px;
+  }
+
+  .flow-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .stat-grid,
+  .stat-grid-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .page-wrap {
+    padding-inline: clamp(22px, 4vw, 44px);
+  }
+
+  .topbar {
+    min-height: 68px;
+    padding-inline: clamp(18px, 4vw, 36px);
+  }
+}
+
+@media (max-width: 767px) {
+  .customer-nav,
+  .customer-hero,
+  .customer-flow,
+  .customer-assurance,
+  .customer-footer,
+  .auth-header,
+  .auth-content {
+    width: calc(100% - 32px);
+  }
+
+  .customer-nav {
+    min-height: 68px;
+    padding-block: 11px;
+  }
+
+  .brand-logo-frame {
+    width: 116px;
+    height: 60px;
+  }
+
+  .brand-logo-frame-inverse {
+    width: 164px;
+    height: 70px;
+  }
+
+  .customer-hero {
+    gap: 34px;
+    padding-block: 38px 52px;
+  }
+
+  .hero-copy h1 {
+    margin-top: 18px;
+    font-size: clamp(3rem, 15vw, 4.5rem);
+  }
+
+  .hero-copy > p {
+    font-size: 0.88rem;
+    line-height: 1.7;
+  }
+
+  .hero-proof {
+    display: grid;
+    gap: 12px;
+    margin-top: 22px;
+  }
+
+  .request-card {
+    border-radius: 18px;
+    padding: 20px 16px;
+  }
+
+  .request-card::before {
+    left: 20px;
+  }
+
+  .card-kicker {
+    gap: 10px;
+    margin-bottom: 22px;
+  }
+
+  .card-kicker p {
+    line-height: 1.45;
+  }
+
+  .customer-flow,
+  .customer-assurance {
+    padding-block: 52px;
+  }
+
+  .customer-flow h2,
+  .customer-assurance h2 {
+    font-size: clamp(2rem, 10vw, 3rem);
+    line-height: 1.02;
+  }
+
+  .flow-grid {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .flow-item {
+    min-height: 0;
+    padding: 16px 0 20px;
+  }
+
+  .flow-item strong {
+    margin-top: 20px;
+  }
+
+  .assurance-list small {
+    line-height: 1.5;
+  }
+
+  .customer-footer {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+    padding-block: 22px 28px;
+    line-height: 1.5;
+  }
+
+  .auth-header {
+    min-height: 72px;
+  }
+
+  .auth-header .btn {
+    min-height: 38px;
+    max-width: 145px;
+    padding-inline: 10px !important;
+    text-align: center;
+  }
+
+  .auth-content {
+    gap: 28px;
+    padding-block: 34px 56px;
+  }
+
+  .auth-intro h1 {
+    font-size: clamp(3rem, 15vw, 5rem);
+  }
+
+  .auth-intro > p {
+    margin-top: 20px;
+    font-size: 0.88rem;
+    line-height: 1.7;
+  }
+
+  .auth-note {
+    max-width: 100%;
+    margin-top: 24px;
+  }
+
+  .auth-card {
+    max-width: none;
+    padding: 20px 16px;
+  }
+
+  .demo-account {
+    gap: 9px;
+    padding: 10px;
+  }
+
+  .demo-account small:last-child {
+    line-height: 1.35;
+    white-space: normal;
+  }
+
+  .topbar {
+    min-height: 64px;
+    padding: 10px 16px;
+  }
+
+  .page-wrap {
+    padding: 24px 16px 40px;
+  }
+
+  .page-wrap h1 {
+    font-size: clamp(1.95rem, 10vw, 2.75rem);
+    line-height: 1.03;
+  }
+
+  .page-wrap .rise-in > .btn,
+  .page-wrap > .rise-in > .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .stat-grid,
+  .stat-grid-3 {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .stat-card {
+    min-height: 126px;
+    padding: 15px;
+  }
+
+  .stat-icon {
+    margin-bottom: 14px;
+  }
+
+  .panel {
+    border-radius: 14px;
+    padding: 16px;
+  }
+
+  .panel-head {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .panel-head > :last-child {
+    max-width: 100%;
+  }
+
+  .filter-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .filter-tabs {
+    width: 100%;
+  }
+
+  .filter-tabs button {
+    flex: 1 1 auto;
+    padding-inline: 10px;
+  }
+
+  .search-field {
+    width: 100%;
+    max-width: none;
+  }
+
+  .date-filter {
+    width: 100%;
+  }
+
+  .table-scroll {
+    margin-inline: -2px;
+  }
+
+  .table-scroll table {
+    min-width: 700px;
+  }
+
+  th,
+  td {
+    padding-block: 12px;
+  }
+
+  .revenue-strip {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .activity-item {
+    align-items: flex-start;
+  }
+
+  .activity-item time {
+    max-width: 74px;
+    white-space: normal;
+    text-align: right;
+    line-height: 1.35;
+  }
+
+  .visit-card {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 15px;
+  }
+
+  .visit-time {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 3px 10px;
+  }
+
+  .visit-time strong {
+    font-size: 0.8rem;
+  }
+
+  .modal-backdrop {
+    place-items: start center;
+    padding: 12px;
+  }
+
+  .modal {
+    max-height: calc(100dvh - 24px);
+    border-radius: 14px;
+    padding: 18px 16px;
+  }
+
+  .modal > div:last-child {
+    flex-direction: column-reverse;
+  }
+
+  .modal > div:last-child .btn {
+    width: 100%;
+  }
+
+  .worker-option {
+    align-items: flex-start;
+    padding: 10px;
+  }
+
+  .method-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .method-option {
+    min-height: 42px;
+  }
+
+  .payment-line {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .report-tip {
+    align-items: flex-start;
+  }
+
+  .media-chip {
+    align-items: flex-start;
+    line-height: 1.4;
+  }
+}
+
+@media (max-width: 359px) {
+  .customer-nav,
+  .customer-hero,
+  .customer-flow,
+  .customer-assurance,
+  .customer-footer,
+  .auth-header,
+  .auth-content {
+    width: calc(100% - 24px);
+  }
+
+  .brand-logo-frame {
+    width: 104px;
+  }
+
+  .customer-nav .btn {
+    max-width: 96px;
+    padding-inline: 8px !important;
+    font-size: 0.68rem;
+  }
+
+  .topbar {
+    padding-inline: 12px;
+  }
+
+  .page-wrap {
+    padding-inline: 12px;
+  }
+
+  .panel,
+  .request-card,
+  .auth-card {
+    padding-inline: 13px;
+  }
+
+  .hero-copy h1,
+  .auth-intro h1 {
+    font-size: 2.8rem;
+  }
+}
+
 @media (max-width: 640px) {
   .customer-nav,
   .customer-hero,
