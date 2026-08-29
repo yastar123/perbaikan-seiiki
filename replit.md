@@ -1,15 +1,19 @@
-# [Project name]
+# SEIIKI — Solusi Energi Kelistrikan Indonesia
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Platform layanan perbaikan dan instalasi listrik untuk pelanggan, admin operasi, dan pekerja lapangan.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm install` — install workspace dependencies
+- `pnpm --filter @workspace/db run push` — apply the development PostgreSQL schema
+- `PORT=8080 pnpm --filter @workspace/api-server run dev` — run the API server
+- `PORT=22402 BASE_PATH=/ pnpm --filter @workspace/seiiki-listrik run dev` — run the frontend
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- Required env for the API: `DATABASE_URL` — Postgres connection string
+- In Replit, use the `SEIIKI API` and `SEIIKI Web` workflows so the proxy routes `/api` and `/` correctly.
 
 ## Stack
 
@@ -22,23 +26,35 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/seiiki-listrik` — React/Vite customer landing page and admin/worker dashboards
+- `artifacts/api-server` — Express API routes for requests, payments, assignments, users, tools, and reports
+- `lib/db/src/schema/seiiki.ts` — PostgreSQL/Drizzle schema
+- `lib/api-spec/openapi.yaml` — API contract source of truth
+- `artifacts/seiiki-listrik/src/index.css` — SEIIKI visual theme tokens and layout styles
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Visit payment is intentionally simulated and fixed at Rp25.000 until a real payment provider is connected.
+- Customer location is captured as latitude/longitude and linked to Google Maps for dispatch.
+- The API uses the shared `/api` proxy path; the frontend uses relative API URLs so preview and deployment share the same routing.
+- Dashboard role switching is a demo access flow; production authentication should be connected before launch.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Customer submits name, WhatsApp, address, GPS location, service type, and notes.
+- Customer pays the simulated visit fee, then continues to the admin WhatsApp.
+- Admin reviews requests, assigns workers, updates statuses and repair estimates, manages dashboard users, reviews equipment requests, and filters transactions by period.
+- Workers see assigned visits, open maps/WhatsApp, submit field notes and image/video metadata, and request equipment.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- User requested Indonesian copy and SEIIKI branding for the electrical service workflow.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Vite requires `PORT` and `BASE_PATH`; run the app through the configured Replit workflows rather than a root-level dev command.
+- The database schema must be pushed before starting the API for the first time.
+- Worker dashboard demo access currently uses worker id `1`; replace it with authenticated user context when auth is added.
 
 ## Pointers
 
