@@ -15,11 +15,15 @@ const SCHEMA_DDL = `
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     phone TEXT NOT NULL,
+    email TEXT,
+    password TEXT,
     role TEXT NOT NULL DEFAULT 'worker',
     specialty TEXT,
     status TEXT NOT NULL DEFAULT 'active',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
+  ALTER TABLE dashboard_users ADD COLUMN IF NOT EXISTS email TEXT;
+  ALTER TABLE dashboard_users ADD COLUMN IF NOT EXISTS password TEXT;
   CREATE TABLE IF NOT EXISTS service_requests (
     id SERIAL PRIMARY KEY,
     code TEXT NOT NULL UNIQUE,
@@ -97,6 +101,54 @@ const SCHEMA_DDL = `
     enable_notes INTEGER NOT NULL DEFAULT 1,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
+  ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS province TEXT;
+  ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS regency TEXT;
+  ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS district TEXT;
+  ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS village TEXT;
+  CREATE TABLE IF NOT EXISTS provinces (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+  CREATE TABLE IF NOT EXISTS regencies (
+    id SERIAL PRIMARY KEY,
+    province_id INTEGER NOT NULL,
+    type TEXT NOT NULL DEFAULT 'kabupaten',
+    name TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+  CREATE TABLE IF NOT EXISTS districts (
+    id SERIAL PRIMARY KEY,
+    regency_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+  CREATE TABLE IF NOT EXISTS villages (
+    id SERIAL PRIMARY KEY,
+    district_id INTEGER NOT NULL,
+    type TEXT NOT NULL DEFAULT 'desa',
+    name TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+  CREATE TABLE IF NOT EXISTS landing_cms (
+    id SERIAL PRIMARY KEY,
+    navbar JSONB NOT NULL,
+    flow JSONB NOT NULL,
+    hero JSONB NOT NULL,
+    assurance JSONB NOT NULL,
+    footer JSONB NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+  ALTER TABLE transactions ADD COLUMN IF NOT EXISTS order_id TEXT;
+  ALTER TABLE transactions ADD COLUMN IF NOT EXISTS paywuz_id TEXT;
+  ALTER TABLE transactions ADD COLUMN IF NOT EXISTS payment_method TEXT;
+  ALTER TABLE transactions ADD COLUMN IF NOT EXISTS payment_number TEXT;
+  ALTER TABLE transactions ADD COLUMN IF NOT EXISTS payment_url TEXT;
+  ALTER TABLE transactions ADD COLUMN IF NOT EXISTS total_payment INTEGER;
+  ALTER TABLE transactions ADD COLUMN IF NOT EXISTS fee INTEGER;
+  ALTER TABLE transactions ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ;
+  ALTER TABLE transactions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+  ALTER TABLE transactions ADD COLUMN IF NOT EXISTS paywuz_status TEXT;
 `;
 
 export async function initDb(): Promise<void> {

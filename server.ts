@@ -20,7 +20,7 @@ for (const envFile of [".env", ".env.example"]) {
 }
 
 const app = express();
-const PORT = Number(process.env.PORT) || 4001;
+const PORT = 3000;
 
 app.use(
   cors({
@@ -28,7 +28,13 @@ app.use(
     origin: true,
   }),
 );
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true }));
 
 // API routes mounted FIRST

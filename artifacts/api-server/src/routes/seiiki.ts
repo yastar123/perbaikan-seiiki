@@ -88,6 +88,8 @@ function mapUser(user: typeof dashboardUsersTable.$inferSelect) {
     id: user.id,
     name: user.name,
     phone: user.phone,
+    email: user.email || `${user.name.toLowerCase().replace(/\s+/g, "")}@seiiki.id`,
+    specialty: user.specialty || "Teknisi Listrik",
     role: user.role as "admin" | "worker",
     status: user.status as "active" | "inactive",
   };
@@ -140,10 +142,16 @@ router.post("/requests", async (req, res): Promise<void> => {
     // fallback to 25000
   }
 
+  const { province, regency, district, village } = req.body || {};
+
   const [request] = await db
     .insert(serviceRequestsTable)
     .values({
       ...parsed.data,
+      province: province || null,
+      regency: regency || null,
+      district: district || null,
+      village: village || null,
       code: `SEI-${Date.now().toString().slice(-8)}`,
       visitFee: currentVisitFee,
       status: "waiting_payment",
@@ -629,7 +637,7 @@ router.get("/booking-services", async (_req, res): Promise<void> => {
           name: "Perbaikan listrik rumah",
           category: "Perbaikan",
           description: "Penanganan korsleting, MCB trip / sering jeglek, kabel panas, dan stop kontak mati.",
-          estimatedPrice: 75000,
+          estimatedPrice: null,
           estimatedDuration: "1 - 2 Jam",
           icon: "Wrench",
           isActive: 1,
@@ -639,7 +647,7 @@ router.get("/booking-services", async (_req, res): Promise<void> => {
           name: "Instalasi titik listrik",
           category: "Pemasangan",
           description: "Penambahan stop kontak baru, saklar lampu, kabel rapi, dan jalur peralatan elektronik.",
-          estimatedPrice: 60000,
+          estimatedPrice: null,
           estimatedDuration: "1 - 3 Jam",
           icon: "Plus",
           isActive: 1,
@@ -649,7 +657,7 @@ router.get("/booking-services", async (_req, res): Promise<void> => {
           name: "Pemeriksaan instalasi",
           category: "Pemeriksaan",
           description: "Audit menyeluruh kelaikan instalasi listrik, kebocoran arus grounding, dan beban trafo/MCB.",
-          estimatedPrice: 100000,
+          estimatedPrice: null,
           estimatedDuration: "2 - 3 Jam",
           icon: "ShieldCheck",
           isActive: 1,
@@ -659,7 +667,7 @@ router.get("/booking-services", async (_req, res): Promise<void> => {
           name: "Perbaikan panel / MCB",
           category: "Panel & Daya",
           description: "Penggantian MCB rusak, upgrade pembagian grup sirkuit panel, dan instalasi ELCB/RCCB anti-setrum.",
-          estimatedPrice: 120000,
+          estimatedPrice: null,
           estimatedDuration: "1 - 2 Jam",
           icon: "Activity",
           isActive: 1,

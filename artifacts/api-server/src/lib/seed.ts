@@ -14,11 +14,25 @@ export async function seedDemoData(): Promise<void> {
     .select({ value: count() })
     .from(dashboardUsersTable);
 
+  const adminEmail = (process.env.ADMIN_EMAIL || "admin@acc.co.id").trim().toLowerCase();
+  const adminPassword = process.env.ADMIN_PASSWORD || "password123";
+
   if (Number(userCount) === 0) {
     await db.insert(dashboardUsersTable).values([
       {
+        name: "Admin SEIIKI",
+        phone: "0811 8899 0011",
+        email: adminEmail,
+        password: adminPassword,
+        role: "admin",
+        specialty: "Operasional",
+        status: "active",
+      },
+      {
         name: "Raka Pratama",
         phone: "0812 9000 1122",
+        email: "raka@seiiki.id",
+        password: "password123",
         role: "worker",
         specialty: "Instalasi & panel",
         status: "active",
@@ -26,15 +40,10 @@ export async function seedDemoData(): Promise<void> {
       {
         name: "Dimas Saputra",
         phone: "0813 5550 7788",
+        email: "dimas@seiiki.id",
+        password: "password123",
         role: "worker",
         specialty: "Perbaikan rumah",
-        status: "active",
-      },
-      {
-        name: "Admin SEIIKI",
-        phone: "0811 8899 0011",
-        role: "admin",
-        specialty: "Operasional",
         status: "active",
       },
     ]);
@@ -76,7 +85,7 @@ export async function seedDemoData(): Promise<void> {
         name: "Perbaikan listrik rumah",
         category: "Perbaikan",
         description: "Penanganan korsleting, MCB trip / sering jeglek, kabel panas, dan stop kontak mati.",
-        estimatedPrice: 75000,
+        estimatedPrice: null,
         estimatedDuration: "1 - 2 Jam",
         icon: "Wrench",
         isActive: 1,
@@ -86,7 +95,7 @@ export async function seedDemoData(): Promise<void> {
         name: "Instalasi titik listrik",
         category: "Pemasangan",
         description: "Penambahan stop kontak baru, saklar lampu, kabel rapi, dan jalur peralatan elektronik.",
-        estimatedPrice: 60000,
+        estimatedPrice: null,
         estimatedDuration: "1 - 3 Jam",
         icon: "Plus",
         isActive: 1,
@@ -96,7 +105,7 @@ export async function seedDemoData(): Promise<void> {
         name: "Pemeriksaan instalasi",
         category: "Pemeriksaan",
         description: "Audit menyeluruh kelaikan instalasi listrik, kebocoran arus grounding, dan beban trafo/MCB.",
-        estimatedPrice: 100000,
+        estimatedPrice: null,
         estimatedDuration: "2 - 3 Jam",
         icon: "ShieldCheck",
         isActive: 1,
@@ -106,7 +115,7 @@ export async function seedDemoData(): Promise<void> {
         name: "Perbaikan panel / MCB",
         category: "Panel & Daya",
         description: "Penggantian MCB rusak, upgrade pembagian grup sirkuit panel, dan instalasi ELCB/RCCB anti-setrum.",
-        estimatedPrice: 120000,
+        estimatedPrice: null,
         estimatedDuration: "1 - 2 Jam",
         icon: "Activity",
         isActive: 1,

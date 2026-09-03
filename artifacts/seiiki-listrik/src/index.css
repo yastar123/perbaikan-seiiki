@@ -674,6 +674,7 @@ button:disabled {
   gap: clamp(44px, 7vw, 100px);
   min-height: 650px;
   padding-block: 70px 90px;
+  border-top: 1px solid hsl(var(--border));
 }
 
 .hero-copy {
@@ -907,10 +908,26 @@ textarea::placeholder {
 }
 
 .customer-flow {
-  border-top: 1px solid hsl(var(--border));
+  border-top: none;
+  padding-top: 40px;
+  padding-bottom: 72px;
 }
 
-.customer-flow h2,
+.customer-flow h2 {
+  max-width: 620px;
+  margin: 22px 0 34px;
+  color: hsl(var(--foreground));
+  font-size: clamp(3.6rem, 7vw, 6.6rem);
+  font-weight: 800;
+  letter-spacing: -0.085em;
+  line-height: 0.91;
+}
+
+.customer-flow h2 em {
+  color: hsl(var(--accent));
+  font-style: normal;
+}
+
 .customer-assurance h2 {
   max-width: 620px;
   margin: 14px 0 34px;
@@ -2110,9 +2127,11 @@ textarea {
     padding-block: 38px 52px;
   }
 
-  .hero-copy h1 {
+  .hero-copy h1,
+  .customer-flow h2 {
     margin-top: 18px;
     font-size: clamp(3rem, 15vw, 4.5rem);
+    line-height: 0.91;
   }
 
   .hero-copy > p {
@@ -2149,7 +2168,6 @@ textarea {
     padding-block: 52px;
   }
 
-  .customer-flow h2,
   .customer-assurance h2 {
     font-size: clamp(2rem, 10vw, 3rem);
     line-height: 1.02;
@@ -2430,6 +2448,7 @@ textarea {
   }
 
   .hero-copy h1,
+  .customer-flow h2,
   .auth-intro h1 {
     font-size: 2.8rem;
   }
@@ -2453,7 +2472,8 @@ textarea {
     height: 62px;
   }
 
-  .hero-copy h1 {
+  .hero-copy h1,
+  .customer-flow h2 {
     font-size: clamp(3.4rem, 18vw, 5.4rem);
   }
 

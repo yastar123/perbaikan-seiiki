@@ -1,0 +1,99 @@
+import { Router, type IRouter } from "express";
+import { eq } from "drizzle-orm";
+import { db } from "@workspace/db";
+import {
+  landingCmsTable,
+  DEFAULT_CMS_CONTENT,
+  type CmsLandingContent,
+  type CmsNavbar,
+  type CmsFlow,
+  type CmsHero,
+  type CmsAssurance,
+  type CmsFooter,
+} from "@workspace/db";
+
+const router: IRouter = Router();
+
+async function getOrInitCms(): Promise<any> {
+  const [existing] = await db.select().from(landingCmsTable).limit(1);
+  if (existing) {
+    return existing;
+  }
+  const [created] = await db
+    .insert(landingCmsTable)
+    .values({
+      navbar: DEFAULT_CMS_CONTENT.navbar,
+      flow: DEFAULT_CMS_CONTENT.flow,
+      hero: DEFAULT_CMS_CONTENT.hero,
+      assurance: DEFAULT_CMS_CONTENT.assurance,
+      footer: DEFAULT_CMS_CONTENT.footer,
+    })
+    .returning();
+  return created;
+}
+
+// GET /api/cms - Fetch public CMS configuration
+router.get("/cms", async (_req, res): Promise<void> => {
+  try {
+    const cms = await getOrInitCms();
+    res.json(cms);
+  } catch (err: any) {
+    console.error("[CMS] Error getting CMS:", err);
+    res.status(500).json({ error: err?.message || "Gagal mengambil data CMS" });
+  }
+});
+
+// PUT /api/cms - Update entire or partial CMS configuration
+router.put("/cms", async (req, res): Promise<void> => {
+  try {
+    const current = await getOrInitCms();
+    const body = req.body || {};
+
+    const updatedData: Partial<CmsLandingContent> = {};
+    if (body.navbar !== undefined) updatedData.navbar = body.navbar;
+    if (body.flow !== undefined) updatedData.flow = body.flow;
+    if (body.hero !== undefined) updatedData.hero = body.hero;
+    if (body.assurance !== undefined) updatedData.assurance = body.assurance;
+    if (body.footer !== undefined) updatedData.footer = body.footer;
+
+    const [updated] = await db
+      .update(landingCmsTable)
+      .set({
+        ...updatedData,
+        updatedAt: new Date(),
+      })
+      .where(eq(landingCmsTable.id, current.id))
+      .returning();
+
+    res.json(updated);
+  } catch (err: any) {
+    console.error("[CMS] Error updating CMS:", err);
+    res.status(500).json({ error: err?.message || "Gagal memperbarui data CMS" });
+  }
+});
+
+// POST /api/cms/reset - Reset CMS back to original defaults
+router.post("/cms/reset", async (_req, res): Promise<void> => {
+  try {
+    const current = await getOrInitCms();
+    const [updated] = await db
+      .update(landingCmsTable)
+      .set({
+        navbar: DEFAULT_CMS_CONTENT.navbar,
+        flow: DEFAULT_CMS_CONTENT.flow,
+        hero: DEFAULT_CMS_CONTENT.hero,
+        assurance: DEFAULT_CMS_CONTENT.assurance,
+        footer: DEFAULT_CMS_CONTENT.footer,
+        updatedAt: new Date(),
+      })
+      .where(eq(landingCmsTable.id, current.id))
+      .returning();
+
+    res.json(updated);
+  } catch (err: any) {
+    console.error("[CMS] Error resetting CMS:", err);
+    res.status(500).json({ error: err?.message || "Gagal mereset data CMS" });
+  }
+});
+
+export default router;

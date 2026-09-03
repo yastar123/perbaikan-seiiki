@@ -1,6 +1,6 @@
 {
-  "name": "SEIIKI Listrik",
-  "description": "Layanan perbaikan, instalasi, dan pemeriksaan listrik SEIIKI dengan pemesanan kunjungan, pembayaran simulasi, penugasan teknisi, dan laporan lapangan.",
+  "name": "SEIIKI — Solusi Energi Kelistrikan Indonesia",
+  "description": "Layanan perbaikan, instalasi, dan pemeriksaan kelistrikan SEIIKI dengan pemesanan kunjungan, pembayaran otomatis via Paywuz Merchant Gateway (QRIS, VA Bank), penugasan teknisi, CMS landing page, dan laporan lapangan.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

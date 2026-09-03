@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx';
 import {
   Activity, AlertTriangle, ArrowRight, BadgeCheck, Banknote, BarChart3, Bell, Boxes, BriefcaseBusiness,
   CalendarDays, Check, CheckCircle2, ChevronDown, ClipboardCheck, Clock3, Download, ExternalLink, Eye, FileEdit, FileText,
-  Headphones, HelpCircle, History, Info, Layers, LayoutDashboard, LocateFixed, LogIn, LogOut, MapPin, Menu,
+  Globe, Headphones, HelpCircle, History, Info, Layers, LayoutDashboard, LocateFixed, LogIn, LogOut, MapPin, Menu,
   MessageCircle, PackageCheck, Paperclip, Pencil, Plus, Radio, ReceiptText, RefreshCw, RotateCcw,
   Save, Search, Send, Settings, Settings2, ShieldCheck, Sliders, SlidersHorizontal, Smartphone, Sparkles,
   Tag, ToggleLeft, ToggleRight, Trash2, UserRound, UsersRound, Wrench, X, Zap
@@ -23,34 +23,21 @@ import {
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { HierarchicalLocationSelector, type HierarchicalLocationValue } from '@/components/location-selector';
+import { AdminLocations } from '@/components/admin-locations';
+import { AdminCms, useLandingCms, renderCmsIcon } from '@/components/admin-cms';
+import { PaywuzPayment } from '@/components/paywuz-payment';
 
 const queryClient = new QueryClient();
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
-type DemoRole = 'admin' | 'worker';
-type DemoSession = { role: DemoRole; email: string; name: string };
-const DEMO_SESSION_KEY = 'seiiki-demo-session';
-const DEMO_ACCOUNTS: Record<DemoRole, DemoSession & { password: string; label: string; description: string }> = {
-  admin: {
-    role: 'admin',
-    email: 'admin@seiiki.id',
-    password: 'admin123',
-    name: 'Ayu Pratami',
-    label: 'Admin operasional',
-    description: 'Kelola permintaan, transaksi, pengguna, dan tim lapangan.',
-  },
-  worker: {
-    role: 'worker',
-    email: 'pekerja@seiiki.id',
-    password: 'pekerja123',
-    name: 'Budi Santoso',
-    label: 'Pekerja lapangan',
-    description: 'Lihat kunjungan, kirim laporan, dan ajukan peralatan.',
-  },
-};
-function getDemoSession(): DemoSession | null {
+type UserRole = 'admin' | 'worker';
+type AuthSession = { id?: number; role: UserRole; email: string; name: string; phone?: string; specialty?: string };
+const AUTH_SESSION_KEY = 'seiiki-auth-session';
+
+function getAuthSession(): AuthSession | null {
   if (typeof window === 'undefined') return null;
   try {
-    const value = JSON.parse(window.localStorage.getItem(DEMO_SESSION_KEY) || 'null') as DemoSession | null;
+    const value = JSON.parse(window.localStorage.getItem(AUTH_SESSION_KEY) || 'null') as AuthSession | null;
     return value && (value.role === 'admin' || value.role === 'worker') ? value : null;
   } catch {
     return null;
@@ -117,7 +104,7 @@ const DEFAULT_BOOKING_SERVICES: BookingService[] = [
     name: 'Perbaikan listrik rumah',
     category: 'Perbaikan',
     description: 'Penanganan korsleting, MCB trip / sering jeglek, kabel panas, dan stop kontak mati.',
-    estimatedPrice: 75000,
+    estimatedPrice: null,
     estimatedDuration: '1 - 2 Jam',
     icon: 'Wrench',
     isActive: 1,
@@ -128,7 +115,7 @@ const DEFAULT_BOOKING_SERVICES: BookingService[] = [
     name: 'Instalasi titik listrik',
     category: 'Pemasangan',
     description: 'Penambahan stop kontak baru, saklar lampu, kabel rapi, dan jalur peralatan elektronik.',
-    estimatedPrice: 60000,
+    estimatedPrice: null,
     estimatedDuration: '1 - 3 Jam',
     icon: 'Plus',
     isActive: 1,
@@ -139,7 +126,7 @@ const DEFAULT_BOOKING_SERVICES: BookingService[] = [
     name: 'Pemeriksaan instalasi',
     category: 'Pemeriksaan',
     description: 'Audit menyeluruh kelaikan instalasi listrik, kebocoran arus grounding, dan beban trafo/MCB.',
-    estimatedPrice: 100000,
+    estimatedPrice: null,
     estimatedDuration: '2 - 3 Jam',
     icon: 'ShieldCheck',
     isActive: 1,
@@ -150,7 +137,7 @@ const DEFAULT_BOOKING_SERVICES: BookingService[] = [
     name: 'Perbaikan panel / MCB',
     category: 'Panel & Daya',
     description: 'Penggantian MCB rusak, upgrade pembagian grup sirkuit panel, dan instalasi ELCB/RCCB anti-setrum.',
-    estimatedPrice: 120000,
+    estimatedPrice: null,
     estimatedDuration: '1 - 2 Jam',
     icon: 'Activity',
     isActive: 1,
@@ -327,54 +314,131 @@ function Logo({ inverse = false }: { inverse?: boolean }) {
     <span className={`brand-logo-frame ${inverse ? 'brand-logo-frame-inverse' : ''}`}><img className="brand-logo" src={`${basePath}/brand-logo.png`} alt="SEIIKI — Solusi Energi Kelistrikan Indonesia" /></span>
   </Link>;
 }
-function DemoLogin() {
+function LoginPage() {
   const [, setLocation] = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const fillDemo = (role: DemoRole) => {
-    const account = DEMO_ACCOUNTS[role];
-    setEmail(account.email);
-    setPassword(account.password);
-    setError('');
-  };
-  const signIn = (event: React.FormEvent) => {
+  const [loading, setLoading] = useState(false);
+
+  const signIn = async (event: React.FormEvent) => {
     event.preventDefault();
-    const account = Object.values(DEMO_ACCOUNTS).find((candidate) => candidate.email === email.trim().toLowerCase() && candidate.password === password);
-    if (!account) {
-      setError('Email atau kata sandi demo belum sesuai. Pilih salah satu akun di bawah.');
-      return;
+    setError('');
+    setLoading(true);
+
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error || 'Login gagal. Periksa kembali email dan kata sandi Anda.');
+        setLoading(false);
+        return;
+      }
+
+      window.localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(data.user));
+      setLocation(data.user.role === 'admin' ? '/admin' : '/worker');
+    } catch (err) {
+      setError('Gagal menghubungi server. Silakan periksa koneksi Anda.');
+    } finally {
+      setLoading(false);
     }
-    window.localStorage.setItem(DEMO_SESSION_KEY, JSON.stringify({ role: account.role, email: account.email, name: account.name }));
-    setLocation(account.role === 'admin' ? '/admin' : '/worker');
   };
-  return <div className="auth-page app-noise min-h-[100dvh]">
-    <header className="auth-header"><Logo /><Link href="/" className="btn btn-outline !px-3 !py-2 text-xs" data-testid="link-back-home">Kembali ke beranda</Link></header>
-    <main className="auth-content">
-      <section className="auth-intro rise-in">
-        <div className="eyebrow"><span className="status-dot bg-accent" /> Akses ruang kerja SEIIKI</div>
-        <h1>Masuk ke<br /><em>ruang tim.</em></h1>
-        <p>Gunakan salah satu akun demo untuk melihat alur kerja admin atau pekerja lapangan.</p>
-        <div className="auth-note"><ShieldCheck size={17} /><span><strong>Mode demo aman</strong><small>Data login hanya disimpan di browser ini.</small></span></div>
-      </section>
-      <section className="auth-card panel rise-in delay-1">
-        <div className="panel-head"><div><div className="eyebrow">Login demo</div><h3>Selamat datang kembali</h3><p className="text-xs text-muted-foreground">Masukkan kredensial demo untuk melanjutkan.</p></div><LogIn size={19} className="text-accent" /></div>
-        <form onSubmit={signIn} className="space-y-4">
-          <Field label="Email"><input type="email" autoComplete="email" required value={email} onChange={(event) => { setEmail(event.target.value); setError(''); }} placeholder="nama@seiiki.id" data-testid="input-demo-email" /></Field>
-          <Field label="Kata sandi"><input type="password" autoComplete="current-password" required value={password} onChange={(event) => { setPassword(event.target.value); setError(''); }} placeholder="Masukkan kata sandi" data-testid="input-demo-password" /></Field>
-          {error && <div className="notice notice-error" role="alert"><X size={15} /> {error}</div>}
-          <Button type="submit" className="w-full justify-center" data-testid="button-demo-login">Masuk ke dashboard <ArrowRight size={16} /></Button>
-        </form>
-        <div className="demo-divider"><span>atau pilih akun demo</span></div>
-        <div className="demo-account-grid">{Object.values(DEMO_ACCOUNTS).map((account) => <button type="button" key={account.role} className="demo-account" onClick={() => fillDemo(account.role)} data-testid={`button-demo-${account.role}`}><span className={`demo-account-icon demo-account-${account.role}`}>{account.role === 'admin' ? <ShieldCheck size={17} /> : <Wrench size={17} />}</span><span className="text-left"><strong>{account.label}</strong><small>{account.email}</small><small>{account.description}</small></span><ArrowRight size={15} className="ml-auto text-muted-foreground" /></button>)}</div>
-        <p className="auth-credentials">Admin: <strong>admin123</strong> · Pekerja: <strong>pekerja123</strong></p>
-      </section>
-    </main>
-  </div>;
+
+  return (
+    <div className="auth-page app-noise min-h-[100dvh]">
+      <header className="auth-header">
+        <Logo />
+        <Link href="/" className="btn btn-outline !px-3 !py-2 text-xs" data-testid="link-back-home">
+          Kembali ke beranda
+        </Link>
+      </header>
+      <main className="auth-content">
+        <section className="auth-intro rise-in">
+          <div className="eyebrow">
+            <span className="status-dot bg-accent" /> Akses Ruang Kerja SEIIKI
+          </div>
+          <h1>
+            Masuk ke<br />
+            <em>ruang kerja tim.</em>
+          </h1>
+          <p>Portal internal pengelolaan permintaan servis listrik, penugasan teknisi, dan transaksi operasional.</p>
+          <div className="auth-note">
+            <ShieldCheck size={17} />
+            <span>
+              <strong>Autentikasi Terverifikasi</strong>
+              <small>Akses terproteksi menggunakan kredensial terdaftar.</small>
+            </span>
+          </div>
+        </section>
+        <section className="auth-card panel rise-in delay-1">
+          <div className="panel-head">
+            <div>
+              <div className="eyebrow">Autentikasi</div>
+              <h3>Selamat datang</h3>
+              <p className="text-xs text-muted-foreground">Masukkan email dan kata sandi untuk masuk ke dashboard.</p>
+            </div>
+            <LogIn size={19} className="text-accent" />
+          </div>
+          <form onSubmit={signIn} className="space-y-4">
+            <Field label="Email">
+              <input
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                  setError('');
+                }}
+                placeholder="nama@domain.com"
+                data-testid="input-login-email"
+              />
+            </Field>
+            <Field label="Kata sandi">
+              <input
+                type="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                  setError('');
+                }}
+                placeholder="Masukkan kata sandi"
+                data-testid="input-login-password"
+              />
+            </Field>
+            {error && (
+              <div className="notice notice-error" role="alert">
+                <X size={15} /> {error}
+              </div>
+            )}
+            <Button type="submit" className="w-full justify-center" disabled={loading} data-testid="button-login">
+              {loading ? (
+                <>
+                  <RefreshCw size={15} className="animate-spin" /> Memproses...
+                </>
+              ) : (
+                <>
+                  Masuk ke dashboard <ArrowRight size={16} />
+                </>
+              )}
+            </Button>
+          </form>
+        </section>
+      </main>
+    </div>
+  );
 }
-function AuthGate({ role, children }: { role: DemoRole; children: React.ReactNode }) {
+
+function AuthGate({ role, children }: { role: UserRole; children: React.ReactNode }) {
   const [, setLocation] = useLocation();
-  const session = getDemoSession();
+  const session = getAuthSession();
   useEffect(() => {
     if (!session || session.role !== role) setLocation('/login');
   }, [role, session?.role, setLocation]);
@@ -394,12 +458,63 @@ function Empty({ title, body, action }: { title: string; body: string; action?: 
 function LoadingRows() { return <div className="space-y-2">{[1, 2, 3].map((i) => <div className="skeleton-row" key={i} />)}</div>; }
 function ErrorNotice({ retry }: { retry: () => void }) { return <div className="notice notice-error"><RefreshCw size={16} /> Data belum dapat dimuat. <button onClick={retry} className="underline font-bold" data-testid="button-retry">Coba lagi</button></div>; }
 
+function ConfirmModal({
+  title,
+  message,
+  confirmText = 'Hapus',
+  kind = 'danger',
+  onConfirm,
+  onClose,
+}: {
+  title: string;
+  message: string;
+  confirmText?: string;
+  kind?: 'danger' | 'primary';
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal max-w-sm" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-2">
+            <AlertTriangle size={18} className="text-amber-500 shrink-0" />
+            <h3 className="text-base font-bold text-foreground">{title}</h3>
+          </div>
+          <button type="button" className="icon-button" onClick={onClose} data-testid="button-close-confirm">
+            <X size={16} />
+          </button>
+        </div>
+        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{message}</p>
+        <div className="mt-6 flex justify-end gap-2">
+          <Button type="button" kind="outline" onClick={onClose} data-testid="button-cancel-confirm">
+            Batal
+          </Button>
+          <Button
+            type="button"
+            kind={kind === 'danger' ? 'danger' : 'primary'}
+            onClick={() => {
+              onConfirm();
+              onClose();
+            }}
+            data-testid="button-confirm-action"
+          >
+            {confirmText}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const adminNav = [
   { href: '/admin', label: 'Ringkasan operasi', icon: LayoutDashboard },
   { href: '/admin/requests', label: 'Permintaan kunjungan', icon: ClipboardCheck },
   { href: '/admin/assignment-history', label: 'Riwayat Penugasan', icon: History },
   { href: '/admin/reports', label: 'Laporan Penugasan', icon: FileText },
+  { href: '/admin/cms', label: 'CMS Halaman Utama', icon: Globe },
   { href: '/admin/booking-component', label: 'Form Pengajuan (01)', icon: SlidersHorizontal },
+  { href: '/admin/locations', label: 'Kelola Wilayah', icon: MapPin },
   { href: '/admin/transactions', label: 'Transaksi', icon: ReceiptText },
   { href: '/admin/equipment', label: 'Peralatan pekerja', icon: Boxes },
   { href: '/admin/users', label: 'Pengguna dashboard', icon: UsersRound },
@@ -414,8 +529,8 @@ function AppShell({ children, role = 'admin' }: { children: React.ReactNode; rol
   const [menu, setMenu] = useState(false);
   const [location, setLocation] = useLocation();
   const nav = role === 'admin' ? adminNav : workerNav;
-  const session = getDemoSession();
-  const displayName = session?.name || (role === 'admin' ? 'Admin SEIIKI' : 'Pekerja lapangan');
+  const session = getAuthSession();
+  const displayName = session?.name || (role === 'admin' ? 'Admin SEIIKI' : 'Teknisi lapangan');
   const initials = displayName.split(/\s+/).map((value) => value[0]).join('').slice(0, 2).toUpperCase();
   useEffect(() => {
     if (!menu) return;
@@ -431,7 +546,7 @@ function AppShell({ children, role = 'admin' }: { children: React.ReactNode; rol
     };
   }, [menu]);
   const logout = () => {
-    window.localStorage.removeItem(DEMO_SESSION_KEY);
+    window.localStorage.removeItem(AUTH_SESSION_KEY);
     setLocation('/login');
   };
   return <div className="app-noise min-h-[100dvh] bg-background w-full">
@@ -445,7 +560,7 @@ function AppShell({ children, role = 'admin' }: { children: React.ReactNode; rol
       <div className="mt-8 px-3 text-[10px] font-extrabold uppercase tracking-[.18em] text-sidebar-foreground/40">{role === 'admin' ? 'Ruang kendali' : 'Ruang pekerja'}</div>
       <nav className="mt-3 space-y-1">{nav.map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={() => setMenu(false)} className={`side-link ${location === href ? 'side-link-active' : ''}`} data-testid={`link-${label.toLowerCase().replaceAll(' ', '-')}`}><Icon size={17} /><span>{label}</span>{href === '/admin/requests' && <span className="ml-auto grid size-5 place-items-center rounded-full bg-primary text-[10px] font-extrabold text-primary-foreground">4</span>}</Link>)}</nav>
       <div className="sidebar-bottom">
-        <button type="button" onClick={logout} className="side-link w-full text-sidebar-foreground/55" data-testid="button-demo-logout"><LogOut size={17} /><span>Keluar</span></button>
+        <button type="button" onClick={logout} className="side-link w-full text-sidebar-foreground/55" data-testid="button-logout"><LogOut size={17} /><span>Keluar</span></button>
       </div>
     </aside>
     {menu && <button type="button" className="sidebar-overlay" aria-label="Tutup menu navigasi" onClick={() => setMenu(false)} data-testid="button-overlay-close-menu" />}
@@ -516,8 +631,8 @@ function RequestTable({ requests, onAssign, onManage, onDelete, compact = false 
             <th>WhatsApp</th>
             <th>Layanan & Alamat (GPS)</th>
             <th>Status</th>
-            <th>Biaya Perbaikan (Rp)</th>
-            <th>Pembayaran</th>
+            <th>Biaya Layanan (Lapangan)</th>
+            <th>Kunjungan</th>
             <th>Teknisi</th>
             <th className="text-right">Aksi</th>
           </tr>
@@ -584,21 +699,22 @@ function RequestTable({ requests, onAssign, onManage, onDelete, compact = false 
                     <button
                       type="button"
                       onClick={() => onManage && onManage(r)}
-                      className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
-                      title="Klik untuk ubah biaya perbaikan"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-all"
+                      title="Biaya layanan lapangan (diinput Admin). Klik untuk ubah."
                       data-testid={`button-cost-${r.id}`}
                     >
-                      {rupiah(r.repairCost)}
+                      <span>{rupiah(r.repairCost)}</span>
+                      <Pencil size={11} className="opacity-70" />
                     </button>
                   ) : (
                     <button
                       type="button"
                       onClick={() => onManage && onManage(r)}
-                      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary underline decoration-dashed"
-                      title="Klik untuk isi biaya perbaikan"
+                      className="inline-flex items-center gap-1 rounded-lg border border-dashed border-border px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:border-accent hover:text-accent transition-colors"
+                      title="Klik untuk input biaya layanan setelah pengecekan di lokasi"
                       data-testid={`button-input-cost-${r.id}`}
                     >
-                      <Pencil size={11} /> Isi biaya
+                      <Plus size={12} /> Input Biaya Lapangan
                     </button>
                   )}
                 </td>
@@ -648,10 +764,12 @@ function CustomerHome() {
   const pay = useCreateVisitPayment();
   const configQuery = useGetBookingConfig();
   const servicesQuery = useListBookingServices();
+  const cmsQuery = useLandingCms();
 
   const config = configQuery.data || DEFAULT_BOOKING_CONFIG;
   const allServices = servicesQuery.data || DEFAULT_BOOKING_SERVICES;
   const activeServices = allServices.filter((s) => s.isActive === 1);
+  const cms = cmsQuery.data;
 
   const [submitted, setSubmitted] = useState<ServiceRequest | null>(null);
   const [paid, setPaid] = useState(false);
@@ -662,6 +780,21 @@ function CustomerHome() {
     serviceType: activeServices[0]?.name || 'Perbaikan listrik rumah',
     notes: '',
   });
+  const [hierarchicalLocation, setHierarchicalLocation] = useState<HierarchicalLocationValue>({
+    provinceId: null,
+    provinceName: '',
+    regencyId: null,
+    regencyType: null,
+    regencyName: '',
+    districtId: null,
+    districtName: '',
+    villageId: null,
+    villageType: null,
+    villageName: '',
+    detail: '',
+    fullAddress: '',
+  });
+  const [locationError, setLocationError] = useState('');
 
   useEffect(() => {
     if (activeServices.length > 0 && (!form.serviceType || !activeServices.some((s) => s.name === form.serviceType))) {
@@ -675,7 +808,25 @@ function CustomerHome() {
   const set = (key: string, value: string) => setForm((f) => ({ ...f, [key]: value }));
 
   const createRequest = (location: { latitude: number; longitude: number }) => {
-    create.mutate({ data: { ...form, ...location } }, { onSuccess: (request) => setSubmitted(request) });
+    const finalAddress = form.address || hierarchicalLocation.fullAddress;
+    if (!finalAddress || finalAddress.trim().length < 4) {
+      setLocationError('Silakan lengkapi pemilihan lokasi wilayah (Provinsi hingga Desa/Kelurahan).');
+      return;
+    }
+    create.mutate(
+      {
+        data: {
+          ...form,
+          address: finalAddress,
+          province: hierarchicalLocation.provinceName || undefined,
+          regency: (hierarchicalLocation.regencyType ? (hierarchicalLocation.regencyType === 'kabupaten' ? 'Kabupaten ' : 'Kota ') : '') + hierarchicalLocation.regencyName,
+          district: hierarchicalLocation.districtName ? `Kecamatan ${hierarchicalLocation.districtName}` : undefined,
+          village: (hierarchicalLocation.villageType ? (hierarchicalLocation.villageType === 'desa' ? 'Desa ' : 'Kelurahan ') : '') + hierarchicalLocation.villageName,
+          ...location,
+        } as any,
+      },
+      { onSuccess: (request) => setSubmitted(request) },
+    );
   };
 
   const locate = (afterLocate = false) => {
@@ -695,6 +846,11 @@ function CustomerHome() {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!hierarchicalLocation.villageId && (!form.address || form.address.trim().length < 4)) {
+      setLocationError('Silakan lengkapi pemilihan lokasi hingga tingkat Desa / Kelurahan.');
+      return;
+    }
+    setLocationError('');
     if (coords) createRequest(coords);
     else if (config.enableGps) locate(true);
     else createRequest({ latitude: -6.2088, longitude: 106.8456 });
@@ -715,29 +871,104 @@ function CustomerHome() {
       <header className="customer-nav">
         <Logo />
         <div className="hidden items-center gap-7 text-xs font-bold text-muted-foreground md:flex">
-          <a href="#alur" data-testid="link-customer-flow">Cara kerja</a>
-          <a href="#aman" data-testid="link-customer-safety">Jaminan kami</a>
-          <Link href="/admin" className="text-foreground" data-testid="link-customer-dashboard">
-            Akses tim <ArrowRight size={13} className="ml-1 inline" />
-          </Link>
+          {cms?.navbar?.links && cms.navbar.links.length > 0 ? (
+            cms.navbar.links.map((link) => (
+              <a key={link.id} href={link.href} data-testid={`link-customer-${link.id}`}>
+                {link.label}
+              </a>
+            ))
+          ) : (
+            <>
+              <a href="#alur" data-testid="link-customer-flow">Cara kerja</a>
+              <a href="#aman" data-testid="link-customer-safety">Jaminan kami</a>
+            </>
+          )}
+          {cms?.navbar?.showAction !== false && (
+            <Link
+              href={cms?.navbar?.actionHref || '/admin'}
+              className="text-foreground"
+              data-testid="link-customer-dashboard"
+            >
+              {cms?.navbar?.actionText || 'Akses tim'} <ArrowRight size={13} className="ml-1 inline" />
+            </Link>
+          )}
         </div>
-        <Link href="/admin" className="btn btn-outline !px-3 !py-2 text-xs md:hidden" data-testid="link-mobile-dashboard">
-          Akses tim
-        </Link>
+        {cms?.navbar?.showAction !== false && (
+          <Link
+            href={cms?.navbar?.actionHref || '/admin'}
+            className="btn btn-outline !px-3 !py-2 text-xs md:hidden"
+            data-testid="link-mobile-dashboard"
+          >
+            {cms?.navbar?.actionText || 'Akses tim'}
+          </Link>
+        )}
       </header>
 
-      <section className="customer-hero">
-        <div className="hero-copy rise-in">
+      {cms?.flow?.enabled !== false && (
+        <section id="alur" className="customer-flow">
           <div className="eyebrow">
-            <span className="status-dot bg-accent" /> Layanan listrik yang datang siap kerja
+            <span className="status-dot bg-accent" /> {cms?.flow?.eyebrow || 'Alur SEIIKI'}
           </div>
-          <h1>Masalah listrik,<br /><em>kami urus.</em></h1>
-          <p>Teknisi terverifikasi datang ke lokasi Anda dengan alur yang jelas, biaya kunjungan pasti, dan admin yang selalu bisa dihubungi.</p>
-          <div className="hero-proof">
-            <span><ShieldCheck size={17} /> Teknisi terverifikasi</span>
-            <span><Clock3 size={17} /> Respon di hari yang sama</span>
+          <h2>
+            {cms?.flow?.titleLine1 || 'Rapi sejak'}<br />
+            <em>{cms?.flow?.titleLine2Accent || 'pesan pertama.'}</em>
+          </h2>
+          <div className="flow-grid">
+            {cms?.flow?.steps && cms.flow.steps.length > 0 ? (
+              cms.flow.steps.map((s) => (
+                <div className="flow-item" key={s.id || s.stepNumber}>
+                  <span>{s.stepNumber}</span>
+                  <strong>{s.title}</strong>
+                  <p>{s.description}</p>
+                </div>
+              ))
+            ) : (
+              [
+                ['01', config.title || 'Ajukan Kunjungan', 'Pilih keluhan listrik & bagikan titik lokasi Anda.'],
+                ['02', 'Bayar Kunjungan', `${rupiah(config.visitFee || 25000)} untuk kedatangan & inspeksi teknisi.`],
+                ['03', 'Pengecekan Lapangan', 'Biaya layanan dihitung teknisi di lokasi & diinput resmi oleh Admin.'],
+              ].map(([n, t, b]) => (
+                <div className="flow-item" key={n}>
+                  <span>{n}</span>
+                  <strong>{t}</strong>
+                  <p>{b}</p>
+                </div>
+              ))
+            )}
           </div>
-        </div>
+        </section>
+      )}
+
+      <section className="customer-hero">
+        {cms?.hero?.enabled !== false && (
+          <div className="hero-copy rise-in">
+            <div className="eyebrow">
+              <span className="status-dot bg-accent" /> {cms?.hero?.eyebrow || 'Layanan listrik yang datang siap kerja'}
+            </div>
+            <h1>
+              {cms?.hero?.titleLine1 || 'Masalah listrik,'}<br />
+              <em>{cms?.hero?.titleLine2Accent || 'kami urus.'}</em>
+            </h1>
+            <p>
+              {cms?.hero?.description ||
+                'Teknisi terverifikasi datang ke lokasi Anda dengan alur yang jelas, biaya kunjungan pasti, dan admin yang selalu bisa dihubungi.'}
+            </p>
+            <div className="hero-proof">
+              {cms?.hero?.badges && cms.hero.badges.length > 0 ? (
+                cms.hero.badges.map((badge) => (
+                  <span key={badge.id || badge.text}>
+                    {renderCmsIcon(badge.icon, 17)} {badge.text}
+                  </span>
+                ))
+              ) : (
+                <>
+                  <span><ShieldCheck size={17} /> Teknisi terverifikasi</span>
+                  <span><Clock3 size={17} /> Respon di hari yang sama</span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="request-card rise-in delay-1">
           <div className="card-kicker">
@@ -772,16 +1003,21 @@ function CustomerHome() {
                 />
               </Field>
 
-              <Field label="Alamat lokasi">
-                <textarea
-                  required
-                  minLength={4}
-                  value={form.address}
-                  onChange={(e) => set('address', e.target.value)}
-                  placeholder={config.addressPlaceholder || 'Alamat lengkap, patokan, dan lantai bila ada'}
-                  data-testid="input-customer-address"
+              <div className="space-y-1">
+                <HierarchicalLocationSelector
+                  value={hierarchicalLocation}
+                  onChange={(val) => {
+                    setHierarchicalLocation(val);
+                    set('address', val.fullAddress);
+                    if (val.villageId) setLocationError('');
+                  }}
                 />
-              </Field>
+                {locationError && (
+                  <p className="text-xs font-semibold text-destructive mt-1 flex items-center gap-1">
+                    <AlertTriangle size={13} /> {locationError}
+                  </p>
+                )}
+              </div>
 
               {config.enableGps === 1 && (
                 <Field label="Titik lokasi GPS" hint={config.gpsHint || 'Bagikan lokasi agar teknisi menemukan alamat dengan tepat'}>
@@ -810,7 +1046,10 @@ function CustomerHome() {
                 </Field>
               )}
 
-              <Field label="Kebutuhan layanan">
+              <Field
+                label="Kebutuhan layanan"
+                hint="Biaya layanan/perbaikan ditentukan setelah teknisi memeriksa langsung di lokasi & diinput oleh Admin."
+              >
                 <select
                   value={form.serviceType}
                   onChange={(e) => set('serviceType', e.target.value)}
@@ -845,9 +1084,14 @@ function CustomerHome() {
                 )}
               </Button>
 
-              <p className="text-center text-[11px] text-muted-foreground">
-                Biaya kunjungan <strong className="text-foreground">{rupiah(config.visitFee || 25000)}</strong> · {config.visitFeeNote || 'dibayar di muka'}
-              </p>
+              <div className="rounded-xl border border-border/80 bg-muted/30 p-2.5 text-center text-xs text-muted-foreground">
+                <p>
+                  Biaya Kunjungan: <strong className="font-mono text-foreground">{rupiah(config.visitFee || 25000)}</strong> ({config.visitFeeNote || 'dibayar di muka'}).
+                </p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  Biaya perbaikan/layanan ditentukan setelah teknisi cek di lokasi dan diinput resmi oleh Admin.
+                </p>
+              </div>
             </form>
           ) : (
             <div className="space-y-4">
@@ -860,62 +1104,37 @@ function CustomerHome() {
               </div>
 
               {!paid ? (
-                <>
-                  <div className="payment-line">
-                    <span>
-                      <span className="block text-xs font-bold">Biaya kunjungan</span>
-                      <span className="text-[11px] text-muted-foreground">Sekali bayar, belum termasuk perbaikan</span>
-                    </span>
-                    <strong>{rupiah(submitted.visitFee || config.visitFee || 25000)}</strong>
-                  </div>
-
-                  <div className="method-grid">
-                    {[
-                      ['qris', 'QRIS'],
-                      ['bank_transfer', 'Transfer bank'],
-                      ['e_wallet', 'E-wallet'],
-                    ].map(([v, label]) => (
-                      <button
-                        type="button"
-                        key={v}
-                        onClick={() => setMethod(v as typeof method)}
-                        className={`method-option ${method === v ? 'method-selected' : ''}`}
-                        data-testid={`button-payment-${v}`}
-                      >
-                        <span className="method-radio" />
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-
-                  <Button
-                    className="w-full justify-center"
-                    onClick={() =>
-                      pay.mutate(
-                        { requestId: submitted.id, data: { method } },
-                        { onSuccess: () => setPaid(true) }
-                      )
-                    }
-                    disabled={pay.isPending}
-                    data-testid="button-pay-visit"
-                  >
-                    {pay.isPending ? 'Memproses pembayaran...' : (
-                      <>Bayar {rupiah(submitted.visitFee || config.visitFee || 25000)} <ArrowRight size={16} /></>
-                    )}
-                  </Button>
-                </>
+                <PaywuzPayment
+                  requestId={submitted.id}
+                  requestCode={submitted.code}
+                  customerName={submitted.customerName}
+                  amount={submitted.visitFee || config.visitFee || 25000}
+                  adminWhatsapp={cleanAdminWa}
+                  onPaymentSuccess={() => {
+                    setPaid(true);
+                    queryClient.invalidateQueries({ queryKey: getListServiceRequestsQueryKey() });
+                    queryClient.invalidateQueries({ queryKey: getListTransactionsQueryKey() });
+                    queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
+                  }}
+                  onCancel={() => {
+                    setSubmitted(null);
+                    setPaid(false);
+                    setCoords(null);
+                    setGeoState('idle');
+                  }}
+                />
               ) : (
                 <div className="space-y-3">
                   <div className="success-panel">
                     <Check size={25} />
                     <div>
-                      <strong>Pembayaran berhasil</strong>
-                      <p>Admin SEIIKI akan menghubungi Anda melalui WhatsApp.</p>
+                      <strong>Pembayaran Berhasil Terverifikasi!</strong>
+                      <p>Sistem Paywuz telah mengonfirmasi pembayaran Anda. Admin SEIIKI akan segera menghubungi Anda melalui WhatsApp.</p>
                     </div>
                   </div>
                   <a
                     className="btn btn-whatsapp w-full justify-center"
-                    href={`https://wa.me/${cleanAdminWa}?text=Halo%20Admin%20SEIIKI,%20saya%20sudah%20membayar%20biaya%20kunjungan%20dengan%20kode%20${submitted.code}.%20Mohon%20jadwalkan%20teknisi.`}
+                    href={`https://wa.me/${cleanAdminWa}?text=Halo%20Admin%20SEIIKI,%20saya%20sudah%20membayar%20biaya%20kunjungan%20via%20Paywuz%20dengan%20kode%20${submitted.code}.%20Mohon%20jadwalkan%20teknisi.`}
                     target="_blank"
                     rel="noreferrer"
                     data-testid="link-whatsapp-admin"
@@ -942,58 +1161,73 @@ function CustomerHome() {
         </div>
       </section>
 
-      <section id="alur" className="customer-flow">
-        <div className="eyebrow">Alur SEIIKI</div>
-        <h2>Rapi sejak pesan pertama.</h2>
-        <div className="flow-grid">
-          {[
-            ['01', config.title || 'Ajukan', 'Ceritakan kebutuhan listrik dan lokasi Anda.'],
-            ['02', 'Bayar kunjungan', `${rupiah(config.visitFee || 25000)} untuk biaya kedatangan teknisi.`],
-            ['03', 'Kami datang', 'Admin dan teknisi meneruskan detail lewat WhatsApp.'],
-          ].map(([n, t, b]) => (
-            <div className="flow-item" key={n}>
-              <span>{n}</span>
-              <strong>{t}</strong>
-              <p>{b}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section id="aman" className="customer-assurance">
-        <div>
-          <div className="eyebrow">Yang bisa Anda pegang</div>
-          <h2>Tenang, ada tim di balik setiap kunjungan.</h2>
-        </div>
-        <div className="assurance-list">
+      {cms?.assurance?.enabled !== false && (
+        <section id="aman" className="customer-assurance">
           <div>
-            <ShieldCheck size={20} />
-            <span>
-              <strong>Teknisi terarah</strong>
-              <small>Penugasan disesuaikan dengan kebutuhan layanan.</small>
-            </span>
+            <div className="eyebrow">{cms?.assurance?.eyebrow || 'Yang bisa Anda pegang'}</div>
+            <h2>{cms?.assurance?.title || 'Tenang, ada tim di balik setiap kunjungan.'}</h2>
           </div>
-          <div>
-            <MessageCircle size={20} />
-            <span>
-              <strong>Admin mudah dihubungi</strong>
-              <small>Setelah bayar, percakapan berlanjut di WhatsApp.</small>
-            </span>
+          <div className="assurance-list">
+            {cms?.assurance?.items && cms.assurance.items.length > 0 ? (
+              cms.assurance.items.map((item) => (
+                <div key={item.id || item.title}>
+                  {renderCmsIcon(item.icon, 20)}
+                  <span>
+                    <strong>{item.title}</strong>
+                    <small>{item.description}</small>
+                  </span>
+                </div>
+              ))
+            ) : (
+              <>
+                <div>
+                  <ShieldCheck size={20} />
+                  <span>
+                    <strong>Teknisi terarah</strong>
+                    <small>Penugasan disesuaikan dengan kebutuhan layanan.</small>
+                  </span>
+                </div>
+                <div>
+                  <MessageCircle size={20} />
+                  <span>
+                    <strong>Admin mudah dihubungi</strong>
+                    <small>Setelah bayar, percakapan berlanjut di WhatsApp.</small>
+                  </span>
+                </div>
+                <div>
+                  <ReceiptText size={20} />
+                  <span>
+                    <strong>Biaya Transparan & Pasti</strong>
+                    <small>Hanya biaya kunjungan di awal. Biaya perbaikan dihitung di lokasi & diinput Admin.</small>
+                  </span>
+                </div>
+              </>
+            )}
           </div>
-          <div>
-            <ReceiptText size={20} />
-            <span>
-              <strong>Biaya transparan</strong>
-              <small>Biaya kunjungan dipisahkan dari estimasi perbaikan.</small>
-            </span>
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       <footer className="customer-footer">
         <Logo />
-        <span>© 2024 SEIIKI · PT Solusi Energi Kelistrikan Indonesia</span>
-        <span className="font-mono text-[10px] uppercase tracking-widest">clear work · safe homes</span>
+        <span>{cms?.footer?.copyrightText || '© 2024 SEIIKI · PT Solusi Energi Kelistrikan Indonesia'}</span>
+        {cms?.footer?.links && cms.footer.links.length > 0 && (
+          <div className="flex items-center gap-4 flex-wrap justify-center text-xs">
+            {cms.footer.links.map((fLink) => (
+              <a
+                key={fLink.id}
+                href={fLink.href}
+                target={fLink.href.startsWith('http') ? '_blank' : undefined}
+                rel="noreferrer"
+                className="text-muted-foreground hover:text-foreground underline"
+              >
+                {fLink.label}
+              </a>
+            ))}
+          </div>
+        )}
+        <span className="font-mono text-[10px] uppercase tracking-widest">
+          {cms?.footer?.tagline || 'clear work · safe homes'}
+        </span>
       </footer>
     </div>
   );
@@ -1016,12 +1250,21 @@ function AdminHome() {
   const countCompleted = requests.filter((r) => r.status === 'completed').length;
   const countCancelled = requests.filter((r) => r.status === 'cancelled').length;
 
+  const session = getAuthSession();
+  const adminName = session?.name || 'Administrator';
+  const currentDateStr = new Intl.DateTimeFormat('id-ID', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date());
+
   return (
     <AppShell>
       <PageIntro
-        eyebrow="Selasa, 18 Juni 2024"
+        eyebrow={currentDateStr}
         title="Ringkasan operasi"
-        body="Selamat pagi, Ayu. Ini keadaan tim dan kunjungan hari ini."
+        body={`Selamat datang, ${adminName}. Ini keadaan tim dan kunjungan terkini.`}
         action={
           <Button
             kind="soft"
@@ -1179,21 +1422,21 @@ function ManageRequestDialog({ request, onClose, onSave }: { request: ServiceReq
         </div>
 
         <div className="mt-5 space-y-4">
-          <Field label="Status Perbaikan" hint="Pilih salah satu dari 3 status operasional perbaikan:">
+          <Field label="Status Pekerjaan / Permintaan" hint="Pilih status operasional terkini:">
             <select
               value={status}
               onChange={(event) => setStatus(event.target.value as ServiceRequest['status'])}
               data-testid="select-request-status"
             >
-              <option value="assigned">Ditugaskan</option>
-              <option value="completed">Selesai</option>
+              <option value="assigned">Ditugaskan (Teknisi Dalam Proses)</option>
+              <option value="completed">Selesai (Pekerjaan Lapangan Rampung)</option>
               <option value="cancelled">Dibatalkan</option>
             </select>
           </Field>
 
           <Field
-            label="Biaya Perbaikan (Rp)"
-            hint="Isi setelah teknisi selesai mengecek/mengerjakan. Kosongkan jika dibatalkan."
+            label="Biaya Layanan / Perbaikan Lapangan (Rp)"
+            hint="Diinput langsung oleh Admin berdasarkan hasil pemeriksaan/pekerjaan teknisi di lokasi. (Biaya kunjungan Rp 25.000 sudah terpisah)."
           >
             <input
               type="number"
@@ -1201,7 +1444,7 @@ function ManageRequestDialog({ request, onClose, onSave }: { request: ServiceReq
               step="1000"
               value={repairCost}
               onChange={(event) => setRepairCost(event.target.value)}
-              placeholder="Contoh: 350000"
+              placeholder="Contoh: 350000 (biaya perbaikan di lokasi)"
               data-testid="input-repair-cost"
             />
           </Field>
@@ -1230,6 +1473,7 @@ function AdminRequests() {
   const [selected, setSelected] = useState<ServiceRequest | null>(null);
   const [managed, setManaged] = useState<ServiceRequest | null>(null);
   const [search, setSearch] = useState('');
+  const [deletingRequest, setDeletingRequest] = useState<ServiceRequest | null>(null);
   const requests = query.data ?? [];
   const workers = workersQuery.data ?? [];
 
@@ -1275,11 +1519,7 @@ function AdminRequests() {
   };
 
   const deleteRequest = (r: ServiceRequest) => {
-    if (window.confirm(`Hapus permintaan ${r.code}?`))
-      remove.mutate(
-        { id: r.id },
-        { onSuccess: () => client.invalidateQueries({ queryKey: getListServiceRequestsQueryKey() }) }
-      );
+    setDeletingRequest(r);
   };
 
   return (
@@ -1363,6 +1603,21 @@ function AdminRequests() {
           onSave={manage}
         />
       )}
+
+      {deletingRequest && (
+        <ConfirmModal
+          title={`Hapus Permintaan ${deletingRequest.code}`}
+          message={`Apakah Anda yakin ingin menghapus permintaan kunjungan untuk "${deletingRequest.customerName}"? Data yang dihapus tidak dapat dipulihkan.`}
+          confirmText="Hapus Permintaan"
+          onConfirm={() => {
+            remove.mutate(
+              { id: deletingRequest.id },
+              { onSuccess: () => client.invalidateQueries({ queryKey: getListServiceRequestsQueryKey() }) }
+            );
+          }}
+          onClose={() => setDeletingRequest(null)}
+        />
+      )}
     </AppShell>
   );
 }
@@ -1381,12 +1636,6 @@ function AdminTransactions() {
     to: period === 'custom' && to ? to : undefined,
   });
   const requestsQuery = useListServiceRequests();
-
-  const demo: Transaction[] = [
-    { id: 1, requestId: 41, requestCode: 'SK-240618-041', customerName: 'Rizky Adi', type: 'visit_fee', amount: 25000, status: 'paid', createdAt: '2024-06-18T08:42:00Z' },
-    { id: 2, requestId: 40, requestCode: 'SK-240617-040', customerName: 'Nadia Kurnia', type: 'repair_fee', amount: 375000, status: 'paid', createdAt: '2024-06-18T07:15:00Z' },
-    { id: 3, requestId: 39, requestCode: 'SK-240616-039', customerName: 'Bima Santoso', type: 'repair_fee', amount: 180000, status: 'pending', createdAt: '2024-06-17T16:30:00Z' },
-  ];
 
   const apiTransactions = query.data ?? [];
   const requests = requestsQuery.data ?? [];
@@ -1409,7 +1658,7 @@ function AdminTransactions() {
 
   // Merge transactions without duplicating
   const allRows = useMemo(() => {
-    const list = apiTransactions.length > 0 ? [...apiTransactions] : [...demo];
+    const list = [...apiTransactions];
     const existingReqKeys = new Set(list.map((t) => `${t.requestId}-${t.type}`));
 
     requestRepairTransactions.forEach((t) => {
@@ -1419,7 +1668,7 @@ function AdminTransactions() {
     });
 
     return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [apiTransactions, requestRepairTransactions, demo]);
+  }, [apiTransactions, requestRepairTransactions]);
 
   // Filter by transaction type & search
   const filteredRows = useMemo(() => {
@@ -1506,6 +1755,36 @@ function AdminTransactions() {
         <Stat label="Biaya Perbaikan" value={rupiah(totalRepairFees)} note="total di-input admin" icon={Wrench} accent="yellow" />
         <Stat label="Biaya Kunjungan" value={rupiah(totalVisitFees)} note="pembayaran awal" icon={MapPin} accent="yellow" />
         <Stat label="Sudah Dibayar" value={rupiah(totalPaid)} note="penerimaan tercatat" icon={Banknote} accent="green" />
+      </div>
+
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-3.5 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent/15 text-accent font-black text-sm">
+            ⚡
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-foreground">Payment Gateway: Paywuz Merchant</span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
+                <CheckCircle2 size={11} /> Terhubung (Live)
+              </span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Mendukung QRIS Instan, Virtual Account Bank (BCA, BNI, BRI, Mandiri), dan e-Wallet terverifikasi otomatis via Paywuz v1.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <a
+            href="https://paywuz.id/"
+            target="_blank"
+            rel="noreferrer"
+            className="btn btn-outline text-xs !py-1.5 !px-3 gap-1.5"
+          >
+            <span>Dashboard Paywuz</span>
+            <ExternalLink size={12} />
+          </a>
+        </div>
       </div>
 
       <section className="panel mt-6">
@@ -1596,36 +1875,58 @@ function AdminTransactions() {
                   <th>Waktu</th>
                   <th>Kode / Pelanggan</th>
                   <th>Jenis Transaksi</th>
+                  <th>Metode / Gateway</th>
                   <th>Nominal Biaya (Rp)</th>
                   <th>Status Pembayaran</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredRows.map((t) => (
-                  <tr key={t.id} data-testid={`row-transaction-${t.id}`}>
-                    <td className="text-xs text-muted-foreground">{time(t.createdAt)}</td>
-                    <td>
-                      <strong className="block text-xs font-mono text-primary">{t.requestCode}</strong>
-                      <span className="text-xs font-semibold text-foreground">{t.customerName}</span>
-                    </td>
-                    <td>
-                      <span
-                        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold ${
-                          t.type === 'repair_fee'
-                            ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20'
-                            : 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20'
-                        }`}
-                      >
-                        {t.type === 'visit_fee' ? <MapPin size={13} /> : <Wrench size={13} />}
-                        {t.type === 'visit_fee' ? 'Biaya Kunjungan' : 'Biaya Perbaikan'}
-                      </span>
-                    </td>
-                    <td className="font-mono text-xs font-bold text-foreground">{rupiah(t.amount)}</td>
-                    <td>
-                      <Status value={t.status} />
-                    </td>
-                  </tr>
-                ))}
+                {filteredRows.map((t) => {
+                  const anyT = t as any;
+                  const payMethod = anyT.paymentMethod || (t.type === 'visit_fee' ? 'QRIS / Paywuz' : 'Admin / Kas');
+                  return (
+                    <tr key={t.id} data-testid={`row-transaction-${t.id}`}>
+                      <td className="text-xs text-muted-foreground">{time(t.createdAt)}</td>
+                      <td>
+                        <strong className="block text-xs font-mono text-primary">{t.requestCode}</strong>
+                        <span className="text-xs font-semibold text-foreground">{t.customerName}</span>
+                      </td>
+                      <td>
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold ${
+                            t.type === 'repair_fee'
+                              ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20'
+                              : 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20'
+                          }`}
+                        >
+                          {t.type === 'visit_fee' ? <MapPin size={13} /> : <Wrench size={13} />}
+                          {t.type === 'visit_fee' ? 'Biaya Kunjungan' : 'Biaya Perbaikan'}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="inline-flex items-center gap-1 font-mono text-[11px] font-bold text-foreground">
+                            {anyT.orderId ? (
+                              <span className="rounded bg-accent/15 px-1 py-0.5 text-[9px] text-accent font-bold">
+                                PAYWUZ
+                              </span>
+                            ) : null}
+                            <span>{payMethod}</span>
+                          </span>
+                          {anyT.orderId && (
+                            <span className="font-mono text-[10px] text-muted-foreground" title={anyT.orderId}>
+                              #{anyT.orderId.slice(-8)}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="font-mono text-xs font-bold text-foreground">{rupiah(t.amount)}</td>
+                      <td>
+                        <Status value={t.status} />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1639,8 +1940,7 @@ function AdminEquipment() {
   const client = useQueryClient();
   const query = useListEquipmentRequests();
   const update = useUpdateEquipmentRequest();
-  const demo: EquipmentRequest[] = [{ id: 1, workerId: 1, workerName: 'Arif Setiawan', item: 'Multimeter digital', quantity: 1, urgency: 'urgent', status: 'pending', createdAt: '2024-06-18T07:31:00Z' }, { id: 2, workerId: 3, workerName: 'Dimas Nugraha', item: 'Kabel NYM 2x1.5', quantity: 2, urgency: 'normal', status: 'pending', createdAt: '2024-06-17T15:21:00Z' }, { id: 3, workerId: 2, workerName: 'Maya Pratiwi', item: 'Tang crimping', quantity: 1, urgency: 'normal', status: 'approved', createdAt: '2024-06-16T09:00:00Z' }];
-  const rows = query.data || demo;
+  const rows = query.data || [];
   const review = (id: number, status: 'approved' | 'rejected') => update.mutate({ id, data: { status } }, { onSuccess: () => client.invalidateQueries({ queryKey: getListEquipmentRequestsQueryKey() }) });
   return <AppShell><PageIntro eyebrow="Kesiapan tim" title="Peralatan pekerja" body="Tinjau kebutuhan alat sebelum teknisi berangkat ke lapangan." /><section className="panel"><div className="panel-head"><div><h3>Permintaan alat</h3><p className="text-xs text-muted-foreground">{rows.filter((r) => r.status === 'pending').length} perlu ditinjau</p></div><Boxes size={18} className="text-muted-foreground" /></div><div className="equipment-list">{rows.map((r) => <div className="equipment-row" key={r.id} data-testid={`row-equipment-${r.id}`}><span className={`equipment-symbol ${r.urgency === 'urgent' ? 'symbol-urgent' : ''}`}><Wrench size={17} /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><strong>{r.item}</strong>{r.urgency === 'urgent' && <Badge tone="warm">Mendesak</Badge>}</div><p>{r.workerName} · {r.quantity} unit · diajukan {date(r.createdAt)}</p></div><div className="flex items-center gap-2">{r.status === 'pending' ? <><Button kind="soft" className="!px-2.5 !py-1.5 text-[11px]" onClick={() => review(r.id, 'approved')} data-testid={`button-approve-equipment-${r.id}`}><Check size={13} /> Setujui</Button><button className="icon-button icon-danger" onClick={() => review(r.id, 'rejected')} data-testid={`button-reject-equipment-${r.id}`}><X size={14} /></button></> : <Status value={r.status} />}</div></div>)}</div></section></AppShell>;
 }
@@ -1652,10 +1952,59 @@ function AdminUsers() {
   const update = useUpdateUser();
   const remove = useDeleteUser();
   const [editing, setEditing] = useState<User | null>(null);
+  const [deleting, setDeleting] = useState<User | null>(null);
   const [open, setOpen] = useState(false);
-  const demo: User[] = [{ id: 1, name: 'Ayu Sari', phone: '0812 0000 2323', role: 'admin', status: 'active' }, { id: 2, name: 'Arif Setiawan', phone: '0812 7740 9211', role: 'worker', status: 'active' }, { id: 3, name: 'Maya Pratiwi', phone: '0813 2041 6658', role: 'worker', status: 'active' }, { id: 4, name: 'Beni Hartono', phone: '0812 4400 9001', role: 'worker', status: 'inactive' }];
-  const rows = query.data || demo;
-  return <AppShell><PageIntro eyebrow="Akses internal" title="Pengguna dashboard" body="Kelola siapa yang dapat mengatur operasi dan mengirim laporan." action={<Button onClick={() => { setEditing(null); setOpen(true); }} data-testid="button-add-user"><Plus size={16} /> Tambah pengguna</Button>} /><section className="panel"><div className="panel-head"><div><h3>{rows.length} pengguna</h3><p className="text-xs text-muted-foreground">Admin dan pekerja yang terdaftar di SEIIKI.</p></div><UsersRound size={18} className="text-muted-foreground" /></div><div className="table-scroll"><table><thead><tr><th>Nama</th><th>Kontak</th><th>Peran</th><th>Status</th><th className="text-right">Aksi</th></tr></thead><tbody>{rows.map((u) => <tr key={u.id} data-testid={`row-user-${u.id}`}><td><span className="flex items-center gap-2.5"><span className="avatar">{u.name.split(' ').map((v) => v[0]).join('').slice(0, 2)}</span><strong className="text-xs">{u.name}</strong></span></td><td className="text-xs text-muted-foreground">{u.phone}</td><td><Badge tone={u.role === 'admin' ? 'warm' : 'neutral'}>{u.role === 'admin' ? 'Admin' : 'Pekerja'}</Badge></td><td><Status value={u.status} /></td><td><div className="flex justify-end gap-1.5"><button className="icon-button" onClick={() => { setEditing(u); setOpen(true); }} data-testid={`button-edit-user-${u.id}`}><Pencil size={14} /></button><button className="icon-button icon-danger" onClick={() => window.confirm(`Hapus ${u.name}?`) && remove.mutate({ id: u.id }, { onSuccess: () => client.invalidateQueries({ queryKey: getListUsersQueryKey() }) })} data-testid={`button-delete-user-${u.id}`}><Trash2 size={14} /></button></div></td></tr>)}</tbody></table></div></section>{open && <UserDialog user={editing} onClose={() => setOpen(false)} onSave={(data) => { if (editing) update.mutate({ id: editing.id, data }, { onSuccess: () => { setOpen(false); client.invalidateQueries({ queryKey: getListUsersQueryKey() }); } }); else create.mutate({ data }, { onSuccess: () => { setOpen(false); client.invalidateQueries({ queryKey: getListUsersQueryKey() }); } }); }} />}</AppShell>;
+  const rows = query.data || [];
+  return (
+    <AppShell>
+      <PageIntro eyebrow="Akses internal" title="Pengguna dashboard" body="Kelola siapa yang dapat mengatur operasi dan mengirim laporan." action={<Button onClick={() => { setEditing(null); setOpen(true); }} data-testid="button-add-user"><Plus size={16} /> Tambah pengguna</Button>} />
+      <section className="panel">
+        <div className="panel-head"><div><h3>{rows.length} pengguna</h3><p className="text-xs text-muted-foreground">Admin dan pekerja yang terdaftar di SEIIKI.</p></div><UsersRound size={18} className="text-muted-foreground" /></div>
+        <div className="table-scroll">
+          <table>
+            <thead><tr><th>Nama</th><th>Kontak</th><th>Peran</th><th>Status</th><th className="text-right">Aksi</th></tr></thead>
+            <tbody>
+              {rows.map((u) => (
+                <tr key={u.id} data-testid={`row-user-${u.id}`}>
+                  <td><span className="flex items-center gap-2.5"><span className="avatar">{u.name.split(' ').map((v) => v[0]).join('').slice(0, 2)}</span><strong className="text-xs">{u.name}</strong></span></td>
+                  <td className="text-xs text-muted-foreground">{u.phone}</td>
+                  <td><Badge tone={u.role === 'admin' ? 'warm' : 'neutral'}>{u.role === 'admin' ? 'Admin' : 'Pekerja'}</Badge></td>
+                  <td><Status value={u.status} /></td>
+                  <td>
+                    <div className="flex justify-end gap-1.5">
+                      <button className="icon-button" onClick={() => { setEditing(u); setOpen(true); }} data-testid={`button-edit-user-${u.id}`}><Pencil size={14} /></button>
+                      <button className="icon-button icon-danger" onClick={() => setDeleting(u)} data-testid={`button-delete-user-${u.id}`}><Trash2 size={14} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      {open && (
+        <UserDialog
+          user={editing}
+          onClose={() => setOpen(false)}
+          onSave={(data) => {
+            if (editing) update.mutate({ id: editing.id, data }, { onSuccess: () => { setOpen(false); client.invalidateQueries({ queryKey: getListUsersQueryKey() }); } });
+            else create.mutate({ data }, { onSuccess: () => { setOpen(false); client.invalidateQueries({ queryKey: getListUsersQueryKey() }); } });
+          }}
+        />
+      )}
+      {deleting && (
+        <ConfirmModal
+          title={`Hapus Pengguna "${deleting.name}"`}
+          message={`Apakah Anda yakin ingin menghapus akun pengguna "${deleting.name}"? Akses login dan data riwayat pengguna ini akan dihentikan.`}
+          confirmText="Hapus Pengguna"
+          onConfirm={() => {
+            remove.mutate({ id: deleting.id }, { onSuccess: () => client.invalidateQueries({ queryKey: getListUsersQueryKey() }) });
+          }}
+          onClose={() => setDeleting(null)}
+        />
+      )}
+    </AppShell>
+  );
 }
 function UserDialog({ user, onClose, onSave }: { user: User | null; onClose: () => void; onSave: (data: any) => void }) {
   const [name, setName] = useState(user?.name || '');
@@ -1671,6 +2020,8 @@ function AdminBookingComponent() {
   const [selectedCategory, setSelectedCategory] = useState('Semua');
   const [serviceModalOpen, setServiceModalOpen] = useState(false);
   const [editingService, setEditingService] = useState<BookingService | null>(null);
+  const [deletingService, setDeletingService] = useState<BookingService | null>(null);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
   // Queries & Mutations
@@ -1708,15 +2059,17 @@ function AdminBookingComponent() {
   };
 
   const handleResetConfig = () => {
-    if (window.confirm('Kembalikan semua teks dan opsi formulir ke nilai bawaan?')) {
-      setConfigForm(DEFAULT_BOOKING_CONFIG);
-      updateConfig.mutate(DEFAULT_BOOKING_CONFIG, {
-        onSuccess: () => {
-          setSaveSuccessMsg('Konfigurasi formulir berhasil direset ke nilai default.');
-          setTimeout(() => setSaveSuccessMsg(null), 4000);
-        },
-      });
-    }
+    setResetConfirmOpen(true);
+  };
+
+  const executeResetConfig = () => {
+    setConfigForm(DEFAULT_BOOKING_CONFIG);
+    updateConfig.mutate(DEFAULT_BOOKING_CONFIG, {
+      onSuccess: () => {
+        setSaveSuccessMsg('Konfigurasi formulir berhasil direset ke nilai default.');
+        setTimeout(() => setSaveSuccessMsg(null), 4000);
+      },
+    });
   };
 
   const handleToggleServiceActive = (service: BookingService) => {
@@ -1728,14 +2081,17 @@ function AdminBookingComponent() {
   };
 
   const handleDeleteService = (service: BookingService) => {
-    if (window.confirm(`Yakin ingin menghapus layanan "${service.name}"?`)) {
-      deleteService.mutate(service.id, {
-        onSuccess: () => {
-          setSaveSuccessMsg(`Layanan "${service.name}" berhasil dihapus.`);
-          setTimeout(() => setSaveSuccessMsg(null), 4000);
-        },
-      });
-    }
+    setDeletingService(service);
+  };
+
+  const executeDeleteService = () => {
+    if (!deletingService) return;
+    deleteService.mutate(deletingService.id, {
+      onSuccess: () => {
+        setSaveSuccessMsg(`Layanan "${deletingService.name}" berhasil dihapus.`);
+        setTimeout(() => setSaveSuccessMsg(null), 4000);
+      },
+    });
   };
 
   const categories = useMemo(() => {
@@ -2169,14 +2525,19 @@ function AdminBookingComponent() {
                 </div>
 
                 <div className="md:col-span-2">
-                  <Field label="Placeholder Alamat Lengkap">
-                    <input
-                      value={configForm.addressPlaceholder}
-                      onChange={(e) => updateConfigFormField('addressPlaceholder', e.target.value)}
-                      placeholder="Alamat lengkap, patokan, dan lantai bila ada"
-                      data-testid="input-config-address-placeholder"
-                    />
-                  </Field>
+                  <div className="rounded-xl border border-primary/30 bg-primary/5 p-3.5 text-xs">
+                    <strong className="flex items-center gap-1.5 font-bold text-foreground mb-1">
+                      <MapPin size={14} className="text-primary" /> Pemilih Wilayah Lokasi Berjenjang Aktif
+                    </strong>
+                    <p className="text-muted-foreground leading-relaxed">
+                      Input alamat lama telah digantikan menjadi pilihan hierarki: Provinsi › Kabupaten/Kota › Kecamatan › Desa/Kelurahan. Anda dapat menambah, mengubah, atau menghapus daftar wilayah pada menu <strong>Kelola Wilayah</strong>.
+                    </p>
+                    <div className="mt-2.5">
+                      <Link href="/admin/locations" className="btn btn-outline !px-3 !py-1 text-xs inline-flex items-center gap-1">
+                        Buka Menu Kelola Wilayah <ArrowRight size={12} />
+                      </Link>
+                    </div>
+                  </div>
                 </div>
 
                 <Field label="Teks Tombol GPS">
@@ -2278,13 +2639,9 @@ function AdminBookingComponent() {
                 />
               </Field>
 
-              <Field label="Alamat lokasi">
-                <textarea
-                  disabled
-                  placeholder={configForm.addressPlaceholder || 'Alamat lengkap, patokan, dan lantai bila ada'}
-                  className="opacity-90"
-                />
-              </Field>
+              <div className="space-y-1 opacity-90">
+                <HierarchicalLocationSelector disabled onChange={() => {}} />
+              </div>
 
               {configForm.enableGps === 1 && (
                 <Field label="Titik lokasi GPS" hint={configForm.gpsHint || 'Bagikan lokasi agar teknisi menemukan alamat dengan tepat'}>
@@ -2352,6 +2709,28 @@ function AdminBookingComponent() {
               });
             }
           }}
+        />
+      )}
+
+      {resetConfirmOpen && (
+        <ConfirmModal
+          title="Reset Konfigurasi Formulir"
+          message="Apakah Anda yakin ingin mengembalikan semua teks, judul, dan opsi formulir pemesanan ke nilai standar bawaan sistem?"
+          confirmText="Reset ke Bawaan"
+          kind="danger"
+          onConfirm={executeResetConfig}
+          onClose={() => setResetConfirmOpen(false)}
+        />
+      )}
+
+      {deletingService && (
+        <ConfirmModal
+          title={`Hapus Layanan "${deletingService.name}"`}
+          message={`Apakah Anda yakin ingin menghapus layanan "${deletingService.name}" dari daftar formulir pengajuan?`}
+          confirmText="Hapus Layanan"
+          kind="danger"
+          onConfirm={executeDeleteService}
+          onClose={() => setDeletingService(null)}
         />
       )}
     </AppShell>
@@ -2541,10 +2920,31 @@ function ServiceDialog({
 function WorkerHome() {
   const client = useQueryClient();
   const requestsQuery = useListServiceRequests();
+  const workersQuery = useListWorkers();
   const update = useUpdateServiceRequest();
-  const requests = (requestsQuery.data ?? []).filter((r) => r.assignedWorkerId === 1);
+
+  const workers = workersQuery.data ?? [];
+  const session = getAuthSession();
+  const matchedWorker = workers.find((w) => w.name.toLowerCase() === session?.name?.toLowerCase());
+  const [selectedWorkerId, setSelectedWorkerId] = useState<number | null>(null);
+
+  const currentWorker = workers.find((w) => w.id === (selectedWorkerId ?? matchedWorker?.id ?? workers[0]?.id)) ?? workers[0];
+  const activeWorkerId = currentWorker?.id ?? 1;
+
+  const requests = (requestsQuery.data ?? []).filter((r) => r.assignedWorkerId === activeWorkerId);
   const report = requests.find((r) => r.status === 'on_site');
   const activeCount = requests.filter((r) => !['completed', 'cancelled'].includes(r.status)).length;
+
+  const currentDateStr = new Intl.DateTimeFormat('id-ID', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date());
+
+  const hour = new Date().getHours();
+  const timeGreeting = hour < 11 ? 'Selamat pagi' : hour < 15 ? 'Selamat siang' : hour < 18 ? 'Selamat sore' : 'Selamat malam';
+  const workerName = currentWorker?.name || session?.name || 'Teknisi';
 
   const startVisit = (id: number) =>
     update.mutate(
@@ -2560,19 +2960,35 @@ function WorkerHome() {
   return (
     <AppShell role="worker">
       <PageIntro
-        eyebrow="Selasa, 18 Juni 2024"
+        eyebrow={currentDateStr}
         title="Kunjungan Saya"
-        body="Pagi, Arif. Berikut tugas yang perlu Anda siapkan hari ini."
+        body={`${timeGreeting}, ${workerName}. Berikut tugas yang perlu Anda siapkan hari ini.`}
         action={
-          <Button kind="soft" onClick={() => requestsQuery.refetch()} data-testid="button-refresh-worker">
-            <RefreshCw size={15} /> Segarkan
-          </Button>
+          <div className="flex items-center gap-2">
+            {workers.length > 1 && (
+              <select
+                className="h-9 rounded-lg border border-border bg-card px-2.5 text-xs text-foreground font-medium shadow-sm outline-none focus:border-accent"
+                value={activeWorkerId}
+                onChange={(e) => setSelectedWorkerId(Number(e.target.value))}
+                data-testid="select-active-worker"
+              >
+                {workers.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    Teknisi: {w.name} ({w.specialty})
+                  </option>
+                ))}
+              </select>
+            )}
+            <Button kind="soft" onClick={() => requestsQuery.refetch()} data-testid="button-refresh-worker">
+              <RefreshCw size={15} /> Segarkan
+            </Button>
+          </div>
         }
       />
 
       <div className="worker-banner">
         <div>
-          <div className="eyebrow text-primary font-bold">Tugas Aktif</div>
+          <div className="eyebrow text-primary font-bold">Tugas Aktif Teknisi</div>
           <h2>{activeCount} Kunjungan Perlu Perhatian</h2>
           <p>Pastikan detail lokasi dan catatan pelanggan sudah terbaca sebelum berangkat.</p>
         </div>
@@ -2582,79 +2998,85 @@ function WorkerHome() {
       </div>
 
       <div className="section-label">
-        <span>Daftar kunjungan</span>
+        <span>Daftar kunjungan {currentWorker ? `(${currentWorker.name})` : ''}</span>
         <Badge tone="neutral">{requests.length} tugas</Badge>
       </div>
 
       <div className="visit-list">
-        {requests.map((r) => (
-          <div className="visit-card" key={r.id} data-testid={`card-visit-${r.id}`}>
-            <div className="visit-time">
-              <span>{r.status === 'completed' ? 'Selesai' : 'Hari ini'}</span>
-              <strong>
-                {r.status === 'on_site'
-                  ? 'Sedang dikerjakan'
-                  : r.status === 'waiting_approval'
-                  ? 'Menunggu cek admin'
-                  : '08.30 — 10.00'}
-              </strong>
-            </div>
-            <div className="visit-main">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <span className="font-mono text-[10px] font-bold text-accent">{r.code}</span>
-                  <h3>{r.serviceType}</h3>
-                </div>
-                <Status value={r.status} />
-              </div>
-              <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-                <MapPin size={13} /> {r.address}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                <UserRound size={13} className="mr-1 inline" /> {r.customerName} · {r.whatsapp}
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {r.status === 'assigned' && (
-                  <Button
-                    className="!px-3 !py-2 text-xs"
-                    onClick={() => startVisit(r.id)}
-                    disabled={update.isPending}
-                    data-testid={`button-start-visit-${r.id}`}
-                  >
-                    <MapPin size={14} /> Mulai kunjungan
-                  </Button>
-                )}
-                {r.status === 'on_site' && (
-                  <Link
-                    href={`/worker/reports?request=${r.id}`}
-                    className="btn btn-primary !px-3 !py-2 text-xs"
-                    data-testid={`link-report-${r.id}`}
-                  >
-                    <FileText size={14} /> Buat laporan
-                  </Link>
-                )}
-                <a
-                  href={`https://www.google.com/maps?q=${r.latitude},${r.longitude}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="btn btn-outline !px-3 !py-2 text-xs"
-                  data-testid={`link-worker-map-${r.id}`}
-                >
-                  <MapPin size={14} /> Buka lokasi
-                </a>
-                <a
-                  href={`https://wa.me/${r.whatsapp.replace(/\D/g, '')}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="btn btn-outline !px-3 !py-2 text-xs"
-                  data-testid={`link-worker-whatsapp-${r.id}`}
-                >
-                  <MessageCircle size={14} /> WhatsApp pelanggan
-                </a>
-              </div>
-            </div>
+        {requests.length === 0 ? (
+          <div className="panel text-center py-10 text-muted-foreground text-sm">
+            Tidak ada tugas kunjungan yang ditugaskan untuk {currentWorker?.name || 'teknisi ini'}.
           </div>
-        ))}
+        ) : (
+          requests.map((r) => (
+            <div className="visit-card" key={r.id} data-testid={`card-visit-${r.id}`}>
+              <div className="visit-time">
+                <span>{r.status === 'completed' ? 'Selesai' : 'Hari ini'}</span>
+                <strong>
+                  {r.status === 'on_site'
+                    ? 'Sedang dikerjakan'
+                    : r.status === 'waiting_approval'
+                    ? 'Menunggu cek admin'
+                    : '08.30 — 10.00'}
+                </strong>
+              </div>
+              <div className="visit-main">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <span className="font-mono text-[10px] font-bold text-accent">{r.code}</span>
+                    <h3>{r.serviceType}</h3>
+                  </div>
+                  <Status value={r.status} />
+                </div>
+                <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <MapPin size={13} /> {r.address}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  <UserRound size={13} className="mr-1 inline" /> {r.customerName} · {r.whatsapp}
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {r.status === 'assigned' && (
+                    <Button
+                      className="!px-3 !py-2 text-xs"
+                      onClick={() => startVisit(r.id)}
+                      disabled={update.isPending}
+                      data-testid={`button-start-visit-${r.id}`}
+                    >
+                      <MapPin size={14} /> Mulai kunjungan
+                    </Button>
+                  )}
+                  {r.status === 'on_site' && (
+                    <Link
+                      href={`/worker/reports?request=${r.id}`}
+                      className="btn btn-primary !px-3 !py-2 text-xs"
+                      data-testid={`link-report-${r.id}`}
+                    >
+                      <FileText size={14} /> Buat laporan
+                    </Link>
+                  )}
+                  <a
+                    href={`https://www.google.com/maps?q=${r.latitude},${r.longitude}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn btn-outline !px-3 !py-2 text-xs"
+                    data-testid={`link-worker-map-${r.id}`}
+                  >
+                    <MapPin size={14} /> Buka lokasi
+                  </a>
+                  <a
+                    href={`https://wa.me/${r.whatsapp.replace(/\D/g, '')}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn btn-outline !px-3 !py-2 text-xs"
+                    data-testid={`link-worker-whatsapp-${r.id}`}
+                  >
+                    <MessageCircle size={14} /> WhatsApp pelanggan
+                  </a>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       {report && (
@@ -3522,20 +3944,34 @@ function WorkerReports() {
   const params = new URLSearchParams(window.location.search);
   const requestsQuery = useListServiceRequests();
   const reportsQuery = useListFieldReports();
+  const workersQuery = useListWorkers();
   const create = useCreateFieldReport();
 
+  const workers = workersQuery.data ?? [];
+  const session = getAuthSession();
+  const matchedWorker = workers.find((w) => w.name.toLowerCase() === session?.name?.toLowerCase());
+  const [selectedWorkerId, setSelectedWorkerId] = useState<number | null>(null);
+  const activeWorkerId = selectedWorkerId ?? matchedWorker?.id ?? workers[0]?.id ?? 1;
+
   const [activeTab, setActiveTab] = useState<'create' | 'history'>('create');
-  const [requestId, setRequestId] = useState(Number(params.get('request')) || 40);
+  const [requestId, setRequestId] = useState(Number(params.get('request')) || 0);
   const [notes, setNotes] = useState('');
   const [media, setMedia] = useState<string[]>([]);
   const [selectedReport, setSelectedReport] = useState<FieldReportItem | null>(null);
 
-  const requests = (requestsQuery.data ?? []).filter((r) => r.assignedWorkerId === 1 && r.status === 'on_site');
+  const requests = (requestsQuery.data ?? []).filter((r) => r.assignedWorkerId === activeWorkerId && r.status === 'on_site');
   const allReports = reportsQuery.data ?? [];
-  const myReports = allReports.filter((r) => r.assignedWorkerId === 1 || !r.assignedWorkerId);
+  const myReports = allReports.filter((r) => r.assignedWorkerId === activeWorkerId || !r.assignedWorkerId);
+
+  useEffect(() => {
+    if (requests.length > 0 && (!requestId || !requests.some(r => r.id === requestId))) {
+      setRequestId(requests[0].id);
+    }
+  }, [requests, requestId]);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!requestId) return;
     create.mutate(
       { id: requestId, data: { notes, media } },
       {
@@ -3557,6 +3993,22 @@ function WorkerReports() {
         eyebrow="Bukti Pekerjaan"
         title="Laporan Lapangan"
         body="Kirim laporan hasil perbaikan di lokasi dan lihat riwayat laporan yang sudah Anda selesaikan."
+        action={
+          workers.length > 1 ? (
+            <select
+              className="h-9 rounded-lg border border-border bg-card px-2.5 text-xs text-foreground font-medium shadow-sm outline-none focus:border-accent"
+              value={activeWorkerId}
+              onChange={(e) => setSelectedWorkerId(Number(e.target.value))}
+              data-testid="select-report-worker"
+            >
+              {workers.map((w) => (
+                <option key={w.id} value={w.id}>
+                  Teknisi: {w.name}
+                </option>
+              ))}
+            </select>
+          ) : undefined
+        }
       />
 
       <div className="filter-bar mb-6">
@@ -3573,7 +4025,7 @@ function WorkerReports() {
             className={activeTab === 'history' ? 'filter-active' : ''}
             data-testid="tab-history-report"
           >
-            <Clock3 size={14} className="inline mr-1" /> Riwayat Laporan Saya ({myReports.length})
+            <Clock3 size={14} className="inline mr-1" /> Riwayat Laporan ({myReports.length})
           </button>
         </div>
       </div>
@@ -3604,7 +4056,7 @@ function WorkerReports() {
                   </select>
                 ) : (
                   <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-700 dark:text-amber-300">
-                    Tidak ada kunjungan berstatus "Di lokasi" yang membutuhkan laporan saat ini. Anda dapat melihat riwayat laporan yang sudah dibuat pada tab <strong>"Riwayat Laporan Saya"</strong>.
+                    Tidak ada kunjungan berstatus "Di lokasi" yang membutuhkan laporan saat ini. Anda dapat melihat riwayat laporan yang sudah dibuat pada tab <strong>"Riwayat Laporan"</strong>.
                   </div>
                 )}
               </Field>
@@ -3687,8 +4139,8 @@ function WorkerReports() {
         <section className="panel space-y-4">
           <div className="panel-head">
             <div>
-              <h3>Daftar Laporan Pekerjaan Saya</h3>
-              <p className="text-xs text-muted-foreground">Semua laporan penugasan yang telah Anda kerjakan dan kirimkan.</p>
+              <h3>Daftar Laporan Pekerjaan</h3>
+              <p className="text-xs text-muted-foreground">Semua laporan penugasan yang telah dikerjakan dan dikirimkan.</p>
             </div>
             <FileText size={18} className="text-muted-foreground" />
           </div>
@@ -3764,10 +4216,131 @@ function WorkerReports() {
 function WorkerEquipment() {
   const client = useQueryClient();
   const query = useListEquipmentRequests();
+  const workersQuery = useListWorkers();
   const create = useCreateEquipmentRequest();
+
+  const workers = workersQuery.data ?? [];
+  const session = getAuthSession();
+  const matchedWorker = workers.find((w) => w.name.toLowerCase() === session?.name?.toLowerCase());
+  const [selectedWorkerId, setSelectedWorkerId] = useState<number | null>(null);
+  const activeWorkerId = selectedWorkerId ?? matchedWorker?.id ?? workers[0]?.id ?? 1;
+
   const [form, setForm] = useState({ item: '', quantity: '1', urgency: 'normal' as 'normal' | 'urgent' });
-  const rows = (query.data || []).filter((r) => r.workerId === 1);
-  return <AppShell role="worker"><PageIntro eyebrow="Kesiapan lapangan" title="Peralatan" body="Minta alat yang Anda perlukan sebelum pekerjaan dimulai." /><div className="report-layout"><form className="panel" onSubmit={(e) => { e.preventDefault(); create.mutate({ data: { workerId: 1, item: form.item, quantity: Number(form.quantity), urgency: form.urgency } }, { onSuccess: () => { setForm({ item: '', quantity: '1', urgency: 'normal' }); client.invalidateQueries({ queryKey: getListEquipmentRequestsQueryKey() }); } }); }}><div className="panel-head"><div><h3>Ajukan peralatan</h3><p className="text-xs text-muted-foreground">Admin akan meninjau permintaan Anda.</p></div><Plus size={18} className="text-muted-foreground" /></div><div className="space-y-4"><Field label="Nama peralatan"><input required value={form.item} onChange={(e) => setForm({ ...form, item: e.target.value })} placeholder="Contoh: Tespen digital" data-testid="input-equipment-item" /></Field><Field label="Jumlah"><input required min="1" type="number" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} data-testid="input-equipment-quantity" /></Field><Field label="Urgensi"><select value={form.urgency} onChange={(e) => setForm({ ...form, urgency: e.target.value as typeof form.urgency })} data-testid="select-equipment-urgency"><option value="normal">Normal</option><option value="urgent">Mendesak</option></select></Field></div><Button type="submit" className="mt-7 w-full justify-center" disabled={create.isPending} data-testid="button-submit-equipment"><Send size={15} /> Kirim permintaan</Button></form><div className="panel"><div className="panel-head"><div><h3>Riwayat saya</h3><p className="text-xs text-muted-foreground">Status permintaan peralatan.</p></div><PackageCheck size={18} className="text-muted-foreground" /></div>{rows.length ? <div className="equipment-list">{rows.map((r) => <div className="equipment-row !px-0" key={r.id}><span className="equipment-symbol"><Wrench size={16} /></span><div className="flex-1"><strong className="text-sm">{r.item}</strong><p>{r.quantity} unit · {date(r.createdAt)}</p></div><Status value={r.status} /></div>)}</div> : <Empty title="Belum ada pengajuan" body="Riwayat permintaan Anda akan muncul di sini." />}</div></div></AppShell>;
+  const rows = (query.data || []).filter((r) => r.workerId === activeWorkerId || !r.workerId);
+
+  return (
+    <AppShell role="worker">
+      <PageIntro
+        eyebrow="Kesiapan lapangan"
+        title="Peralatan"
+        body="Minta alat yang Anda perlukan sebelum pekerjaan dimulai."
+        action={
+          workers.length > 1 ? (
+            <select
+              className="h-9 rounded-lg border border-border bg-card px-2.5 text-xs text-foreground font-medium shadow-sm outline-none focus:border-accent"
+              value={activeWorkerId}
+              onChange={(e) => setSelectedWorkerId(Number(e.target.value))}
+              data-testid="select-equipment-worker"
+            >
+              {workers.map((w) => (
+                <option key={w.id} value={w.id}>
+                  Teknisi: {w.name}
+                </option>
+              ))}
+            </select>
+          ) : undefined
+        }
+      />
+      <div className="report-layout">
+        <form
+          className="panel"
+          onSubmit={(e) => {
+            e.preventDefault();
+            create.mutate(
+              { data: { workerId: activeWorkerId, item: form.item, quantity: Number(form.quantity), urgency: form.urgency } },
+              {
+                onSuccess: () => {
+                  setForm({ item: '', quantity: '1', urgency: 'normal' });
+                  client.invalidateQueries({ queryKey: getListEquipmentRequestsQueryKey() });
+                },
+              }
+            );
+          }}
+        >
+          <div className="panel-head">
+            <div>
+              <h3>Ajukan peralatan</h3>
+              <p className="text-xs text-muted-foreground">Admin akan meninjau permintaan Anda.</p>
+            </div>
+            <Plus size={18} className="text-muted-foreground" />
+          </div>
+          <div className="space-y-4">
+            <Field label="Nama peralatan">
+              <input
+                required
+                value={form.item}
+                onChange={(e) => setForm({ ...form, item: e.target.value })}
+                placeholder="Contoh: Tespen digital"
+                data-testid="input-equipment-item"
+              />
+            </Field>
+            <Field label="Jumlah">
+              <input
+                required
+                min="1"
+                type="number"
+                value={form.quantity}
+                onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+                data-testid="input-equipment-quantity"
+              />
+            </Field>
+            <Field label="Urgensi">
+              <select
+                value={form.urgency}
+                onChange={(e) => setForm({ ...form, urgency: e.target.value as typeof form.urgency })}
+                data-testid="select-equipment-urgency"
+              >
+                <option value="normal">Normal</option>
+                <option value="urgent">Mendesak</option>
+              </select>
+            </Field>
+          </div>
+          <Button type="submit" className="mt-7 w-full justify-center" disabled={create.isPending} data-testid="button-submit-equipment">
+            <Send size={15} /> Kirim permintaan
+          </Button>
+        </form>
+        <div className="panel">
+          <div className="panel-head">
+            <div>
+              <h3>Riwayat saya</h3>
+              <p className="text-xs text-muted-foreground">Status permintaan peralatan.</p>
+            </div>
+            <PackageCheck size={18} className="text-muted-foreground" />
+          </div>
+          {rows.length ? (
+            <div className="equipment-list">
+              {rows.map((r) => (
+                <div className="equipment-row !px-0" key={r.id}>
+                  <span className="equipment-symbol">
+                    <Wrench size={16} />
+                  </span>
+                  <div className="flex-1">
+                    <strong className="text-sm">{r.item}</strong>
+                    <p>
+                      {r.quantity} unit · {date(r.createdAt)}
+                    </p>
+                  </div>
+                  <Status value={r.status} />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <Empty title="Belum ada pengajuan" body="Riwayat permintaan Anda akan muncul di sini." />
+          )}
+        </div>
+      </div>
+    </AppShell>
+  );
 }
 
 function NotFound() { return <div className="grid min-h-[100dvh] place-items-center bg-background p-6 text-center"><div><Logo /><h1 className="mt-10">Halaman tidak ditemukan</h1><p className="mt-2 text-sm text-muted-foreground">Rute ini belum tersedia di ruang kerja SEIIKI.</p><Link href="/" className="btn btn-primary mt-6 inline-flex" data-testid="link-not-found-home">Kembali ke beranda</Link></div></div>; }
@@ -3776,9 +4349,11 @@ function AdminHomeRoute() { return <AuthGate role="admin"><AdminHome /></AuthGat
 function AdminRequestsRoute() { return <AuthGate role="admin"><AdminRequests /></AuthGate>; }
 function AdminAssignmentHistoryRoute() { return <AuthGate role="admin"><AdminAssignmentHistory /></AuthGate>; }
 function AdminReportsRoute() { return <AuthGate role="admin"><AdminReports /></AuthGate>; }
+function AdminCmsRoute() { return <AuthGate role="admin"><AppShell><AdminCms /></AppShell></AuthGate>; }
 function AdminBookingComponentRoute() { return <AuthGate role="admin"><AdminBookingComponent /></AuthGate>; }
 function AdminTransactionsRoute() { return <AuthGate role="admin"><AdminTransactions /></AuthGate>; }
 function AdminEquipmentRoute() { return <AuthGate role="admin"><AdminEquipment /></AuthGate>; }
+function AdminLocationsRoute() { return <AuthGate role="admin"><AppShell><AdminLocations /></AppShell></AuthGate>; }
 function AdminUsersRoute() { return <AuthGate role="admin"><AdminUsers /></AuthGate>; }
 function WorkerHomeRoute() { return <AuthGate role="worker"><WorkerHome /></AuthGate>; }
 function WorkerEquipmentRoute() { return <AuthGate role="worker"><WorkerEquipment /></AuthGate>; }
@@ -3788,12 +4363,14 @@ function AppRoutes() {
     <ErrorBoundary resetKey={window.location.pathname}>
       <Switch>
         <Route path="/" component={CustomerHome} />
-        <Route path="/login" component={DemoLogin} />
+        <Route path="/login" component={LoginPage} />
         <Route path="/admin" component={AdminHomeRoute} />
         <Route path="/admin/requests" component={AdminRequestsRoute} />
         <Route path="/admin/assignment-history" component={AdminAssignmentHistoryRoute} />
         <Route path="/admin/reports" component={AdminReportsRoute} />
+        <Route path="/admin/cms" component={AdminCmsRoute} />
         <Route path="/admin/booking-component" component={AdminBookingComponentRoute} />
+        <Route path="/admin/locations" component={AdminLocationsRoute} />
         <Route path="/admin/transactions" component={AdminTransactionsRoute} />
         <Route path="/admin/equipment" component={AdminEquipmentRoute} />
         <Route path="/admin/users" component={AdminUsersRoute} />
