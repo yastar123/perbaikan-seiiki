@@ -215,6 +215,47 @@ export async function seedDefaultLocations(): Promise<void> {
       { districtId: kecKepanjen.id, type: "desa", name: "Ardirejo" },
       { districtId: kecKepanjen.id, type: "desa", name: "Cepokomulyo" },
     ]);
+    // 5. Lampung
+    const [lampung] = await db
+      .insert(provincesTable)
+      .values({ name: "Lampung" })
+      .returning();
+    const [bdl] = await db
+      .insert(regenciesTable)
+      .values({ provinceId: lampung.id, type: "kota", name: "Bandar Lampung" })
+      .returning();
+    const [kecLangkapura] = await db
+      .insert(districtsTable)
+      .values({ regencyId: bdl.id, name: "Langkapura" })
+      .returning();
+    await db.insert(villagesTable).values([
+      { districtId: kecLangkapura.id, type: "kelurahan", name: "Langkapura" },
+      { districtId: kecLangkapura.id, type: "kelurahan", name: "Bilabong Jaya" },
+      { districtId: kecLangkapura.id, type: "kelurahan", name: "Gunung Terang" },
+      { districtId: kecLangkapura.id, type: "kelurahan", name: "Langkapura Baru" },
+    ]);
+    const [kecKedaton] = await db
+      .insert(districtsTable)
+      .values({ regencyId: bdl.id, name: "Kedaton" })
+      .returning();
+    await db.insert(villagesTable).values([
+      { districtId: kecKedaton.id, type: "kelurahan", name: "Kedaton" },
+      { districtId: kecKedaton.id, type: "kelurahan", name: "Sukamenanti" },
+      { districtId: kecKedaton.id, type: "kelurahan", name: "Surabaya" },
+    ]);
+    const [kabLamsel] = await db
+      .insert(regenciesTable)
+      .values({ provinceId: lampung.id, type: "kabupaten", name: "Lampung Selatan" })
+      .returning();
+    const [kecNatar] = await db
+      .insert(districtsTable)
+      .values({ regencyId: kabLamsel.id, name: "Natar" })
+      .returning();
+    await db.insert(villagesTable).values([
+      { districtId: kecNatar.id, type: "desa", name: "Natar" },
+      { districtId: kecNatar.id, type: "desa", name: "Hajimena" },
+      { districtId: kecNatar.id, type: "desa", name: "Merak Batin" },
+    ]);
   } catch (err) {
     console.error("[Locations] Seed error:", err);
   }

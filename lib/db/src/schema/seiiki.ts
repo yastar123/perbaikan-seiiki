@@ -13,7 +13,7 @@ import { z } from "zod/v4";
 export const dashboardUsersTable = pgTable("dashboard_users", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  phone: text("phone").notNull(),
+  phone: text("phone").default(""),
   email: text("email"),
   password: text("password"),
   role: text("role").notNull().default("worker"),
@@ -37,6 +37,10 @@ export const serviceRequestsTable = pgTable("service_requests", {
   latitude: real("latitude").notNull(),
   longitude: real("longitude").notNull(),
   serviceType: text("service_type").notNull(),
+  powerVa: integer("power_va"),
+  sloFee: integer("slo_fee"),
+  nidiFee: integer("nidi_fee"),
+  totalAmount: integer("total_amount"),
   notes: text("notes"),
   status: text("status").notNull().default("waiting_payment"),
   paymentStatus: text("payment_status").notNull().default("unpaid"),
@@ -146,6 +150,21 @@ export const bookingServicesTable = pgTable("booking_services", {
     .defaultNow(),
 });
 
+export const nidiSloTariffsTable = pgTable("nidi_slo_tariffs", {
+  id: serial("id").primaryKey(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  powerVa: integer("power_va").notNull(),
+  powerLabel: text("power_label").notNull(),
+  sloFee: integer("slo_fee").notNull(),
+  nidiFee: integer("nidi_fee").notNull(),
+  totalFee: integer("total_fee").notNull(),
+  notes: text("notes"),
+  isActive: integer("is_active").notNull().default(1),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const bookingConfigTable = pgTable("booking_config", {
   id: serial("id").primaryKey(),
   stepNumber: text("step_number").notNull().default("01"),
@@ -187,6 +206,9 @@ export const insertFieldReportSchema = createInsertSchema(
 ).omit({ id: true, createdAt: true });
 export const insertBookingServiceSchema = createInsertSchema(
   bookingServicesTable,
+).omit({ id: true, createdAt: true });
+export const insertNidiSloTariffSchema = createInsertSchema(
+  nidiSloTariffsTable,
 ).omit({ id: true, createdAt: true });
 export const insertBookingConfigSchema = createInsertSchema(
   bookingConfigTable,
@@ -307,8 +329,8 @@ export const DEFAULT_CMS_CONTENT: CmsLandingContent = {
   flow: {
     enabled: true,
     eyebrow: "Alur SEIIKI",
-    titleLine1: "Rapi sejak",
-    titleLine2Accent: "pesan pertama.",
+    titleLine1: "JASA KETENAGALISTRIKAN",
+    titleLine2Accent: "LAMPUNG",
     steps: [
       { id: "s1", stepNumber: "01", title: "Ajukan", description: "Ceritakan kebutuhan listrik dan lokasi Anda." },
       { id: "s2", stepNumber: "02", title: "Bayar kunjungan", description: "Rp 25.000 untuk biaya kedatangan teknisi." },
@@ -340,7 +362,6 @@ export const DEFAULT_CMS_CONTENT: CmsLandingContent = {
     copyrightText: "© 2024 SEIIKI · PT Solusi Energi Kelistrikan Indonesia",
     tagline: "clear work · safe homes",
     links: [
-      { id: "f1", label: "Hubungi Admin WhatsApp", href: "https://wa.me/6281112345678" },
       { id: "f2", label: "Masuk Dashboard Internal", href: "/login" },
     ],
     whatsappContact: "6281112345678",

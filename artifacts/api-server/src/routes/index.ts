@@ -14,5 +14,6 @@ router.use(locationsRouter);
 router.use(cmsRouter);
 router.use(paywuzRouter);
 router.use(seiikiRouter);
+router.use("/seiiki", seiikiRouter);
 
 export default router;

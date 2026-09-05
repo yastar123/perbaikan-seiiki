@@ -261,7 +261,9 @@ export const UserStatus = {
 export interface User {
   id: number;
   name: string;
-  phone: string;
+  phone?: string;
+  email?: string;
+  password?: string;
   role: UserRole;
   status: UserStatus;
 }
@@ -276,8 +278,11 @@ export const UserInputRole = {
 
 export interface UserInput {
   name: string;
-  phone: string;
-  role: UserInputRole;
+  username?: string;
+  email?: string;
+  password?: string;
+  phone?: string;
+  role?: UserInputRole;
   specialty?: string;
 }
 
@@ -299,6 +304,9 @@ export const UserUpdateStatus = {
 
 export interface UserUpdate {
   name?: string;
+  username?: string;
+  email?: string;
+  password?: string;
   phone?: string;
   role?: UserUpdateRole;
   status?: UserUpdateStatus;

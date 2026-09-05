@@ -26,6 +26,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { HierarchicalLocationSelector, type HierarchicalLocationValue } from '@/components/location-selector';
 import { AdminLocations } from '@/components/admin-locations';
 import { AdminCms, useLandingCms, renderCmsIcon } from '@/components/admin-cms';
+import { AdminSettings } from '@/components/admin-settings';
 import { PaywuzPayment } from '@/components/paywuz-payment';
 
 const queryClient = new QueryClient();
@@ -233,6 +234,99 @@ function useDeleteBookingService() {
     },
     onSuccess: () => {
       client.invalidateQueries({ queryKey: ['booking-services'] });
+    },
+  });
+}
+
+export interface NidiSloTariff {
+  id: number;
+  sortOrder: number;
+  powerVa: number;
+  powerLabel: string;
+  sloFee: number;
+  nidiFee: number;
+  totalFee: number;
+  notes: string | null;
+  isActive: number;
+  createdAt?: string;
+}
+
+function useListNidiSloTariffs(activeOnly?: boolean) {
+  return useQuery<NidiSloTariff[]>({
+    queryKey: ['nidi-slo-tariffs', activeOnly],
+    queryFn: async () => {
+      const url = `${basePath}/api/seiiki/nidi-slo-tariffs${activeOnly ? '?activeOnly=true' : ''}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Gagal memuat tarif NIDI & SLO');
+      return res.json();
+    },
+  });
+}
+
+function useCreateNidiSloTariff() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: Partial<NidiSloTariff>) => {
+      const res = await fetch(`${basePath}/api/seiiki/nidi-slo-tariffs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error('Gagal menambahkan tarif');
+      return res.json();
+    },
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ['nidi-slo-tariffs'] });
+    },
+  });
+}
+
+function useUpdateNidiSloTariff() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: Partial<NidiSloTariff> }) => {
+      const res = await fetch(`${basePath}/api/seiiki/nidi-slo-tariffs/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error('Gagal memperbarui tarif');
+      return res.json();
+    },
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ['nidi-slo-tariffs'] });
+    },
+  });
+}
+
+function useDeleteNidiSloTariff() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`${basePath}/api/seiiki/nidi-slo-tariffs/${id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('Gagal menghapus tarif');
+      return true;
+    },
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ['nidi-slo-tariffs'] });
+    },
+  });
+}
+
+function useResetNidiSloTariffs() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`${basePath}/api/nidi-slo-tariffs/reset-defaults`, {
+        method: 'POST',
+      });
+      if (!res.ok) throw new Error('Gagal mereset tarif NIDI & SLO');
+      return res.json();
+    },
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ['nidi-slo-tariffs'] });
     },
   });
 }
@@ -512,6 +606,7 @@ const adminNav = [
   { href: '/admin/requests', label: 'Permintaan kunjungan', icon: ClipboardCheck },
   { href: '/admin/assignment-history', label: 'Riwayat Penugasan', icon: History },
   { href: '/admin/reports', label: 'Laporan Penugasan', icon: FileText },
+  { href: '/admin/settings', label: 'Pengaturan', icon: Settings },
   { href: '/admin/cms', label: 'CMS Halaman Utama', icon: Globe },
   { href: '/admin/booking-component', label: 'Form Pengajuan (01)', icon: SlidersHorizontal },
   { href: '/admin/locations', label: 'Kelola Wilayah', icon: MapPin },
@@ -764,11 +859,13 @@ function CustomerHome() {
   const pay = useCreateVisitPayment();
   const configQuery = useGetBookingConfig();
   const servicesQuery = useListBookingServices();
+  const nidiTariffsQuery = useListNidiSloTariffs(true);
   const cmsQuery = useLandingCms();
 
   const config = configQuery.data || DEFAULT_BOOKING_CONFIG;
   const allServices = servicesQuery.data || DEFAULT_BOOKING_SERVICES;
   const activeServices = allServices.filter((s) => s.isActive === 1);
+  const tariffs = nidiTariffsQuery.data || [];
   const cms = cmsQuery.data;
 
   const [submitted, setSubmitted] = useState<ServiceRequest | null>(null);
@@ -777,9 +874,37 @@ function CustomerHome() {
     customerName: '',
     whatsapp: '',
     address: '',
-    serviceType: activeServices[0]?.name || 'Perbaikan listrik rumah',
+    serviceType: activeServices[0]?.name || 'Perbaikan Listrik Rumah',
     notes: '',
   });
+  const [selectedTariffId, setSelectedTariffId] = useState<number | null>(null);
+  const [tariffSearch, setTariffSearch] = useState('');
+
+  const isNidiSlo = useMemo(() => {
+    const s = (form.serviceType || '').toLowerCase();
+    return s.includes('nidi') || s.includes('slo');
+  }, [form.serviceType]);
+
+  const selectedTariff = useMemo(() => {
+    if (!tariffs.length) return null;
+    if (selectedTariffId) {
+      const found = tariffs.find((t) => t.id === selectedTariffId);
+      if (found) return found;
+    }
+    return tariffs[0];
+  }, [tariffs, selectedTariffId]);
+
+  const filteredTariffs = useMemo(() => {
+    if (!tariffSearch.trim()) return tariffs;
+    const q = tariffSearch.toLowerCase().replace(/\./g, '');
+    return tariffs.filter((t) => {
+      const vaStr = String(t.powerVa);
+      const labelStr = t.powerLabel.toLowerCase();
+      const notesStr = (t.notes || '').toLowerCase();
+      return vaStr.includes(q) || labelStr.includes(q) || notesStr.includes(q);
+    });
+  }, [tariffs, tariffSearch]);
+
   const [hierarchicalLocation, setHierarchicalLocation] = useState<HierarchicalLocationValue>({
     provinceId: null,
     provinceName: '',
@@ -813,18 +938,27 @@ function CustomerHome() {
       setLocationError('Silakan lengkapi pemilihan lokasi wilayah (Provinsi hingga Desa/Kelurahan).');
       return;
     }
+
+    const payload: any = {
+      ...form,
+      address: finalAddress,
+      province: hierarchicalLocation.provinceName || undefined,
+      regency: (hierarchicalLocation.regencyType ? (hierarchicalLocation.regencyType === 'kabupaten' ? 'Kabupaten ' : 'Kota ') : '') + hierarchicalLocation.regencyName,
+      district: hierarchicalLocation.districtName ? `Kecamatan ${hierarchicalLocation.districtName}` : undefined,
+      village: (hierarchicalLocation.villageType ? (hierarchicalLocation.villageType === 'desa' ? 'Desa ' : 'Kelurahan ') : '') + hierarchicalLocation.villageName,
+      ...location,
+    };
+
+    if (isNidiSlo && selectedTariff) {
+      payload.powerVa = selectedTariff.powerVa;
+      payload.sloFee = selectedTariff.sloFee;
+      payload.nidiFee = selectedTariff.nidiFee;
+      payload.totalAmount = selectedTariff.totalFee;
+      payload.visitFee = 0;
+    }
+
     create.mutate(
-      {
-        data: {
-          ...form,
-          address: finalAddress,
-          province: hierarchicalLocation.provinceName || undefined,
-          regency: (hierarchicalLocation.regencyType ? (hierarchicalLocation.regencyType === 'kabupaten' ? 'Kabupaten ' : 'Kota ') : '') + hierarchicalLocation.regencyName,
-          district: hierarchicalLocation.districtName ? `Kecamatan ${hierarchicalLocation.districtName}` : undefined,
-          village: (hierarchicalLocation.villageType ? (hierarchicalLocation.villageType === 'desa' ? 'Desa ' : 'Kelurahan ') : '') + hierarchicalLocation.villageName,
-          ...location,
-        } as any,
-      },
+      { data: payload },
       { onSuccess: (request) => setSubmitted(request) },
     );
   };
@@ -910,8 +1044,8 @@ function CustomerHome() {
             <span className="status-dot bg-accent" /> {cms?.flow?.eyebrow || 'Alur SEIIKI'}
           </div>
           <h2>
-            {cms?.flow?.titleLine1 || 'Rapi sejak'}<br />
-            <em>{cms?.flow?.titleLine2Accent || 'pesan pertama.'}</em>
+            {cms?.flow?.titleLine1 || 'JASA KETENAGALISTRIKAN'}<br />
+            <em>{cms?.flow?.titleLine2Accent || 'LAMPUNG'}</em>
           </h2>
           <div className="flow-grid">
             {cms?.flow?.steps && cms.flow.steps.length > 0 ? (
@@ -935,6 +1069,62 @@ function CustomerHome() {
                 </div>
               ))
             )}
+          </div>
+
+          {/* Location Coverage Disclaimer Component */}
+          <div className="mt-8 rounded-2xl border border-destructive/30 bg-destructive/5 p-5 md:p-6 shadow-sm">
+            <div className="flex items-start gap-3.5">
+              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-destructive text-destructive-foreground shadow-sm">
+                <AlertTriangle size={18} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-destructive">
+                    Disclaimer Jangkauan Layanan
+                  </span>
+                  <span className="rounded-md bg-destructive/15 px-2 py-0.5 text-[10px] font-bold text-destructive">
+                    Penting
+                  </span>
+                </div>
+                <h4 className="mt-1 text-sm font-bold text-foreground md:text-base">
+                  Wilayah di Luar Pilihan Input Tidak Akan Dilayani
+                </h4>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground md:text-sm">
+                  Teknisi SEIIKI hanya dapat melayani kunjungan pada wilayah administratif yang terdaftar dan dapat dipilih secara lengkap bertahap pada formulir:
+                </p>
+
+                {/* 4 Step Hierarchy Preview */}
+                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="rounded-xl border border-border/80 bg-background/90 p-2.5">
+                    <div className="text-[10px] font-mono text-muted-foreground uppercase">Langkah 1/4</div>
+                    <div className="text-xs font-bold text-foreground mt-0.5">Provinsi</div>
+                    <div className="text-[11px] text-muted-foreground truncate">Contoh: Lampung</div>
+                  </div>
+                  <div className="rounded-xl border border-border/80 bg-background/90 p-2.5">
+                    <div className="text-[10px] font-mono text-muted-foreground uppercase">Langkah 2/4</div>
+                    <div className="text-xs font-bold text-foreground mt-0.5">Kabupaten / Kota</div>
+                    <div className="text-[11px] text-muted-foreground truncate">Contoh: Bandar Lampung</div>
+                  </div>
+                  <div className="rounded-xl border border-border/80 bg-background/90 p-2.5">
+                    <div className="text-[10px] font-mono text-muted-foreground uppercase">Langkah 3/4</div>
+                    <div className="text-xs font-bold text-foreground mt-0.5">Kecamatan</div>
+                    <div className="text-[11px] text-muted-foreground truncate">Contoh: Langkapura</div>
+                  </div>
+                  <div className="rounded-xl border border-border/80 bg-background/90 p-2.5">
+                    <div className="text-[10px] font-mono text-muted-foreground uppercase">Langkah 4/4</div>
+                    <div className="text-xs font-bold text-foreground mt-0.5">Kelurahan / Desa</div>
+                    <div className="text-[11px] text-muted-foreground truncate">Pilih yang terdaftar</div>
+                  </div>
+                </div>
+
+                <div className="mt-3 flex items-start gap-2 rounded-lg bg-destructive/10 p-2.5 text-xs font-medium text-destructive">
+                  <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                  <span>
+                    <strong>Perhatian:</strong> Apabila lokasi/wilayah tempat tinggal Anda tidak tersedia atau tidak ada dalam opsi pilihan (Langkah 1 s/d 4), mohon maaf pesanan kunjungan <strong>TIDAK AKAN DILAYANI</strong>.
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
       )}
@@ -981,6 +1171,134 @@ function CustomerHome() {
 
           {!submitted ? (
             <form onSubmit={submit} className="space-y-4">
+              <Field
+                label="Kebutuhan layanan"
+                hint={isNidiSlo ? "Layanan NIDI & SLO mencakup sertifikasi lengkap dengan biaya resmi berdasarkan daya listrik." : "Biaya perbaikan ditentukan setelah teknisi memeriksa langsung di lokasi & diinput oleh Admin."}
+              >
+                <select
+                  value={form.serviceType}
+                  onChange={(e) => set('serviceType', e.target.value)}
+                  data-testid="select-service-type"
+                >
+                  {activeServices.length > 0 ? (
+                    activeServices.map((s) => (
+                      <option key={s.id} value={s.name}>
+                        {s.name}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="Perbaikan Listrik Rumah">Perbaikan Listrik Rumah</option>
+                      <option value="Pasang Baru">Pasang Baru</option>
+                      <option value="NIDI dan SLO">NIDI dan SLO</option>
+                    </>
+                  )}
+                </select>
+              </Field>
+
+              {/* NIDI & SLO Pricing Matrix Selection */}
+              {isNidiSlo && (
+                <div className="space-y-3 rounded-2xl border-2 border-primary/40 bg-card p-4 shadow-sm">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex size-6 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xs font-black">⚡</span>
+                        <h4 className="text-sm font-bold text-foreground">Rekap Tarif SLO & Supervisi NIDI (TR)</h4>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Tegangan Rendah — Pilih golongan daya listrik Anda di bawah ini:
+                      </p>
+                    </div>
+
+                    <div className="search-field !mt-0 max-w-[200px]">
+                      <Search size={13} />
+                      <input
+                        type="text"
+                        value={tariffSearch}
+                        onChange={(e) => setTariffSearch(e.target.value)}
+                        placeholder="Cari daya (VA)..."
+                        className="!text-xs !py-1"
+                        data-testid="input-search-tariff"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Pricing Table */}
+                  <div className="max-h-60 overflow-y-auto rounded-xl border border-border/80 bg-background/90 text-xs">
+                    <table className="w-full text-left border-collapse">
+                      <thead className="sticky top-0 bg-muted/90 backdrop-blur-xs text-[11px] font-bold text-muted-foreground border-b border-border">
+                        <tr>
+                          <th className="py-2 px-2.5 w-10 text-center">No.</th>
+                          <th className="py-2 px-2.5">Daya (VA)</th>
+                          <th className="py-2 px-2.5">Biaya SLO</th>
+                          <th className="py-2 px-2.5">Supervisi NIDI</th>
+                          <th className="py-2 px-2.5">Total Biaya</th>
+                          <th className="py-2 px-2.5 text-center">Pilih</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredTariffs.map((t, idx) => {
+                          const isSelected = selectedTariff?.id === t.id;
+                          return (
+                            <tr
+                              key={t.id}
+                              onClick={() => setSelectedTariffId(t.id)}
+                              className={`cursor-pointer border-b border-border/40 transition-colors ${
+                                isSelected
+                                  ? 'bg-primary/15 font-bold text-foreground hover:bg-primary/20'
+                                  : 'hover:bg-muted/50 text-foreground/80'
+                              }`}
+                              data-testid={`row-tariff-${t.id}`}
+                            >
+                              <td className="py-2 px-2.5 text-center font-mono text-[11px] text-muted-foreground">{t.sortOrder || idx + 1}</td>
+                              <td className="py-2 px-2.5">
+                                <span className="font-bold text-foreground">{t.powerLabel}</span>
+                              </td>
+                              <td className="py-2 px-2.5 font-mono text-[11px]">{rupiah(t.sloFee)}</td>
+                              <td className="py-2 px-2.5 font-mono text-[11px]">{rupiah(t.nidiFee)}</td>
+                              <td className="py-2 px-2.5 font-mono font-bold text-primary">{rupiah(t.totalFee)}</td>
+                              <td className="py-2 px-2.5 text-center">
+                                <input
+                                  type="radio"
+                                  name="nidiTariff"
+                                  checked={isSelected}
+                                  onChange={() => setSelectedTariffId(t.id)}
+                                  className="accent-primary cursor-pointer"
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Selected Breakdown Card */}
+                  {selectedTariff && (
+                    <div className="rounded-xl border border-primary/30 bg-primary/5 p-3.5 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                          <CheckCircle2 size={15} className="text-emerald-500" />
+                          Paket Dipilih: <strong>{selectedTariff.powerLabel} ({selectedTariff.powerVa.toLocaleString('id-ID')} VA)</strong>
+                        </span>
+                        <span className="text-xs font-mono font-black text-primary">
+                          {rupiah(selectedTariff.totalFee)}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground border-t border-primary/15 pt-2">
+                        <div>Biaya SLO: <strong className="font-mono text-foreground">{rupiah(selectedTariff.sloFee)}</strong></div>
+                        <div>Supervisi NIDI: <strong className="font-mono text-foreground">{rupiah(selectedTariff.nidiFee)}</strong></div>
+                      </div>
+
+                      <p className="text-[11px] text-muted-foreground italic">
+                        * Pembayaran layanan NIDI & SLO langsung lunas penuh sesuai tarif paket daya di atas via Paywuz (tidak ada biaya kunjungan terpisah).
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <Field label="Nama lengkap">
                 <input
                   required
@@ -1046,27 +1364,6 @@ function CustomerHome() {
                 </Field>
               )}
 
-              <Field
-                label="Kebutuhan layanan"
-                hint="Biaya layanan/perbaikan ditentukan setelah teknisi memeriksa langsung di lokasi & diinput oleh Admin."
-              >
-                <select
-                  value={form.serviceType}
-                  onChange={(e) => set('serviceType', e.target.value)}
-                  data-testid="select-service-type"
-                >
-                  {activeServices.length > 0 ? (
-                    activeServices.map((s) => (
-                      <option key={s.id} value={s.name}>
-                        {s.name}
-                      </option>
-                    ))
-                  ) : (
-                    <option value="Perbaikan listrik umum">Perbaikan listrik umum</option>
-                  )}
-                </select>
-              </Field>
-
               {geoState === 'error' && config.enableGps === 1 && (
                 <div className="notice notice-error">
                   <MapPin size={15} /> Izinkan akses lokasi di browser untuk mengirim permintaan.
@@ -1076,21 +1373,34 @@ function CustomerHome() {
               <Button
                 type="submit"
                 className="w-full justify-center"
-                disabled={create.isPending || geoState === 'loading'}
+                disabled={create.isPending || geoState === 'loading' || (isNidiSlo && !selectedTariff)}
                 data-testid="button-submit-request"
               >
                 {create.isPending ? 'Mengirim permintaan...' : (
-                  <>{config.buttonText || 'Lanjut ke pembayaran'} <ArrowRight size={16} /></>
+                  <>{isNidiSlo && selectedTariff ? `Lanjut Bayar (${rupiah(selectedTariff.totalFee)})` : (config.buttonText || 'Lanjut ke pembayaran')} <ArrowRight size={16} /></>
                 )}
               </Button>
 
               <div className="rounded-xl border border-border/80 bg-muted/30 p-2.5 text-center text-xs text-muted-foreground">
-                <p>
-                  Biaya Kunjungan: <strong className="font-mono text-foreground">{rupiah(config.visitFee || 25000)}</strong> ({config.visitFeeNote || 'dibayar di muka'}).
-                </p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  Biaya perbaikan/layanan ditentukan setelah teknisi cek di lokasi dan diinput resmi oleh Admin.
-                </p>
+                {isNidiSlo && selectedTariff ? (
+                  <>
+                    <p>
+                      Total Biaya NIDI & SLO: <strong className="font-mono text-foreground">{rupiah(selectedTariff.totalFee)}</strong> (Langsung Lunas).
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      Sudah termasuk Sertifikat Laik Operasi (SLO) dan Nomor Identitas Instalasi (NIDI).
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p>
+                      Biaya Kunjungan: <strong className="font-mono text-foreground">{rupiah(config.visitFee || 25000)}</strong> ({config.visitFeeNote || 'dibayar di muka'}).
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      Biaya perbaikan/layanan ditentukan setelah teknisi cek di lokasi dan diinput resmi oleh Admin.
+                    </p>
+                  </>
+                )}
               </div>
             </form>
           ) : (
@@ -1099,7 +1409,7 @@ function CustomerHome() {
                 <BadgeCheck size={25} />
                 <div>
                   <strong>Permintaan tercatat</strong>
-                  <p>Kode Anda <b>{submitted.code}</b>. Selesaikan pembayaran untuk mengunci jadwal kunjungan.</p>
+                  <p>Kode Anda <b>{submitted.code}</b>. Selesaikan pembayaran untuk mengunci pesanan layanan Anda.</p>
                 </div>
               </div>
 
@@ -1108,7 +1418,7 @@ function CustomerHome() {
                   requestId={submitted.id}
                   requestCode={submitted.code}
                   customerName={submitted.customerName}
-                  amount={submitted.visitFee || config.visitFee || 25000}
+                  amount={submitted.totalAmount || submitted.visitFee || config.visitFee || 25000}
                   adminWhatsapp={cleanAdminWa}
                   onPaymentSuccess={() => {
                     setPaid(true);
@@ -1134,7 +1444,11 @@ function CustomerHome() {
                   </div>
                   <a
                     className="btn btn-whatsapp w-full justify-center"
-                    href={`https://wa.me/${cleanAdminWa}?text=Halo%20Admin%20SEIIKI,%20saya%20sudah%20membayar%20biaya%20kunjungan%20via%20Paywuz%20dengan%20kode%20${submitted.code}.%20Mohon%20jadwalkan%20teknisi.`}
+                    href={`https://wa.me/${cleanAdminWa}?text=${encodeURIComponent(
+                      submitted.totalAmount && submitted.powerVa
+                        ? `Halo Admin SEIIKI, saya sudah membayar lunas layanan ${submitted.serviceType} (Daya ${submitted.powerVa.toLocaleString('id-ID')} VA - ${rupiah(submitted.totalAmount)}) via Paywuz dengan kode ${submitted.code}. Mohon segera diproses.`
+                        : `Halo Admin SEIIKI, saya sudah membayar biaya kunjungan via Paywuz dengan kode ${submitted.code}. Mohon jadwalkan teknisi.`
+                    )}`}
                     target="_blank"
                     rel="noreferrer"
                     data-testid="link-whatsapp-admin"
@@ -1210,19 +1524,22 @@ function CustomerHome() {
       <footer className="customer-footer">
         <Logo />
         <span>{cms?.footer?.copyrightText || '© 2024 SEIIKI · PT Solusi Energi Kelistrikan Indonesia'}</span>
-        {cms?.footer?.links && cms.footer.links.length > 0 && (
+        {cms?.footer?.links &&
+          cms.footer.links.filter((f) => !f.label.toLowerCase().includes('hubungi admin whatsapp')).length > 0 && (
           <div className="flex items-center gap-4 flex-wrap justify-center text-xs">
-            {cms.footer.links.map((fLink) => (
-              <a
-                key={fLink.id}
-                href={fLink.href}
-                target={fLink.href.startsWith('http') ? '_blank' : undefined}
-                rel="noreferrer"
-                className="text-muted-foreground hover:text-foreground underline"
-              >
-                {fLink.label}
-              </a>
-            ))}
+            {cms.footer.links
+              .filter((f) => !f.label.toLowerCase().includes('hubungi admin whatsapp'))
+              .map((fLink) => (
+                <a
+                  key={fLink.id}
+                  href={fLink.href}
+                  target={fLink.href.startsWith('http') ? '_blank' : undefined}
+                  rel="noreferrer"
+                  className="text-muted-foreground hover:text-foreground underline"
+                >
+                  {fLink.label}
+                </a>
+              ))}
           </div>
         )}
         <span className="font-mono text-[10px] uppercase tracking-widest">
@@ -1624,8 +1941,9 @@ function AdminRequests() {
 
 function AdminTransactions() {
   const client = useQueryClient();
-  const [period, setPeriod] = useState<'all' | 'week' | 'month' | 'custom'>('month');
-  const [typeFilter, setTypeFilter] = useState<'all' | 'visit_fee' | 'repair_fee'>('all');
+  const [period, setPeriod] = useState<'all' | 'week' | 'month' | 'custom'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'pending' | 'cancelled'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'visit_fee' | 'repair_fee' | 'nidi_slo_fee'>('all');
   const [search, setSearch] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -1640,77 +1958,189 @@ function AdminTransactions() {
   const apiTransactions = query.data ?? [];
   const requests = requestsQuery.data ?? [];
 
-  // Derived repair cost transactions from requests
-  const requestRepairTransactions: Transaction[] = useMemo(() => {
-    return requests
-      .filter((r) => typeof r.repairCost === 'number' && r.repairCost > 0)
-      .map((r) => ({
-        id: 99000 + r.id,
-        requestId: r.id,
-        requestCode: r.code,
-        customerName: r.customerName,
-        type: 'repair_fee' as const,
-        amount: r.repairCost!,
-        status: r.status === 'completed' ? ('paid' as const) : ('pending' as const),
-        createdAt: r.createdAt,
-      }));
-  }, [requests]);
+  // Helper to test if a date fits into the selected period
+  const isWithinPeriod = (dateStr: string | Date) => {
+    if (period === 'all') return true;
+    const d = new Date(dateStr).getTime();
+    const now = Date.now();
+    if (period === 'week') return d >= now - 7 * 86400000;
+    if (period === 'month') return d >= now - 30 * 86400000;
+    if (period === 'custom') {
+      if (from && d < new Date(from).getTime()) return false;
+      if (to && d > new Date(to).setHours(23, 59, 59, 999)) return false;
+      return true;
+    }
+    return true;
+  };
 
-  // Merge transactions without duplicating
+  // Synchronize and unify all transactions from transactionsTable and service requests
   const allRows = useMemo(() => {
     const list = [...apiTransactions];
-    const existingReqKeys = new Set(list.map((t) => `${t.requestId}-${t.type}`));
+    const existingKeys = new Set(list.map((t) => `${t.requestId}-${t.type}`));
 
-    requestRepairTransactions.forEach((t) => {
-      if (!existingReqKeys.has(`${t.requestId}-${t.type}`)) {
-        list.unshift(t);
+    requests.forEach((r) => {
+      const isSlo = (r.serviceType || '').toLowerCase().includes('slo') || (r.serviceType || '').toLowerCase().includes('nidi');
+
+      // 1. NIDI & SLO transaction
+      if (isSlo && isWithinPeriod(r.createdAt)) {
+        const key = `${r.id}-nidi_slo_fee`;
+        if (!existingKeys.has(key)) {
+          const amount = r.totalAmount || 0;
+          list.push({
+            id: 88000 + r.id,
+            requestId: r.id,
+            requestCode: r.code,
+            customerName: r.customerName,
+            type: 'nidi_slo_fee' as any,
+            amount: amount,
+            status: r.status === 'completed' || r.status === 'in_progress' ? ('paid' as const) : r.status === 'cancelled' ? ('cancelled' as const) : ('pending' as const),
+            createdAt: r.createdAt,
+            powerVa: r.powerVa,
+          } as any);
+          existingKeys.add(key);
+        }
+      }
+
+      // 2. Repair fee transaction
+      if (typeof r.repairCost === 'number' && r.repairCost > 0 && isWithinPeriod(r.createdAt)) {
+        const key = `${r.id}-repair_fee`;
+        if (!existingKeys.has(key)) {
+          list.push({
+            id: 99000 + r.id,
+            requestId: r.id,
+            requestCode: r.code,
+            customerName: r.customerName,
+            type: 'repair_fee' as const,
+            amount: r.repairCost,
+            status: r.status === 'completed' ? ('paid' as const) : r.status === 'cancelled' ? ('cancelled' as const) : ('pending' as const),
+            createdAt: r.createdAt,
+          });
+          existingKeys.add(key);
+        }
       }
     });
 
     return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [apiTransactions, requestRepairTransactions]);
+  }, [apiTransactions, requests, period, from, to]);
 
-  // Filter by transaction type & search
+  // Segmentations by status
+  const paidRows = useMemo(
+    () => allRows.filter((r) => r.status === 'paid' || (r as any).paywuzStatus === 'success'),
+    [allRows]
+  );
+  const pendingRows = useMemo(
+    () =>
+      allRows.filter(
+        (r) => r.status === 'pending' || r.status === 'waiting_payment' || r.status === 'unpaid'
+      ),
+    [allRows]
+  );
+  const cancelledRows = useMemo(
+    () =>
+      allRows.filter(
+        (r) =>
+          r.status === 'cancelled' ||
+          r.status === 'failed' ||
+          r.status === 'expired' ||
+          r.status === 'rejected'
+      ),
+    [allRows]
+  );
+
+  // Segmentations by type
+  const repairRows = useMemo(() => allRows.filter((r) => r.type === 'repair_fee'), [allRows]);
+  const visitRows = useMemo(() => allRows.filter((r) => r.type === 'visit_fee'), [allRows]);
+  const nidiSloRows = useMemo(() => allRows.filter((r) => (r.type as string) === 'nidi_slo_fee'), [allRows]);
+
+  // Financial calculations
+  const totalPaid = useMemo(
+    () => paidRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0),
+    [paidRows]
+  );
+  const totalRepairFees = useMemo(
+    () => repairRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0),
+    [repairRows]
+  );
+  const totalVisitFees = useMemo(
+    () => visitRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0),
+    [visitRows]
+  );
+  const totalNidiSloFees = useMemo(
+    () => nidiSloRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0),
+    [nidiSloRows]
+  );
+
+  // Filtered rows for table view
   const filteredRows = useMemo(() => {
     return allRows.filter((r) => {
+      if (statusFilter !== 'all') {
+        if (statusFilter === 'paid' && !(r.status === 'paid' || (r as any).paywuzStatus === 'success')) return false;
+        if (
+          statusFilter === 'pending' &&
+          !(r.status === 'pending' || r.status === 'waiting_payment' || r.status === 'unpaid')
+        )
+          return false;
+        if (
+          statusFilter === 'cancelled' &&
+          !(
+            r.status === 'cancelled' ||
+            r.status === 'failed' ||
+            r.status === 'expired' ||
+            r.status === 'rejected'
+          )
+        )
+          return false;
+      }
       if (typeFilter !== 'all' && r.type !== typeFilter) return false;
       if (search.trim()) {
         const q = search.toLowerCase();
-        const match = `${r.requestCode} ${r.customerName}`.toLowerCase().includes(q);
+        const match = `${r.requestCode} ${r.customerName} ${(r as any).paymentMethod || ''} ${r.type}`.toLowerCase().includes(q);
         if (!match) return false;
       }
       return true;
     });
-  }, [allRows, typeFilter, search]);
-
-  const totalPaid = allRows.filter((r) => r.status === 'paid').reduce((s, r) => s + r.amount, 0);
-  const totalRepairFees = allRows.filter((r) => r.type === 'repair_fee').reduce((s, r) => s + r.amount, 0);
-  const totalVisitFees = allRows.filter((r) => r.type === 'visit_fee').reduce((s, r) => s + r.amount, 0);
+  }, [allRows, statusFilter, typeFilter, search]);
 
   const handleExportExcel = (exportAll = true) => {
     const listToExport = exportAll ? allRows : filteredRows;
-    const dataToExport = listToExport.map((t, index) => ({
-      No: index + 1,
-      'Kode Permintaan': t.requestCode,
-      'Nama Pelanggan': t.customerName,
-      'Jenis Transaksi': t.type === 'visit_fee' ? 'Biaya Kunjungan' : 'Biaya Perbaikan',
-      'Nominal Biaya (Rp)': t.amount,
-      'Status Pembayaran': t.status === 'paid' ? 'Sudah Dibayar' : 'Pending',
-      'Tanggal & Waktu': new Date(t.createdAt).toLocaleString('id-ID', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      }),
-    }));
+    const dataToExport = listToExport.map((t, index) => {
+      const anyT = t as any;
+      const statusText =
+        t.status === 'paid' || anyT.paywuzStatus === 'success'
+          ? 'Berhasil (Lunas)'
+          : t.status === 'cancelled' || t.status === 'failed' || t.status === 'expired'
+          ? 'Dibatalkan'
+          : 'Menunggu Pembayaran';
+      const typeText =
+        t.type === 'nidi_slo_fee'
+          ? 'NIDI & SLO'
+          : t.type === 'visit_fee'
+          ? 'Biaya Kunjungan'
+          : 'Biaya Perbaikan';
+      return {
+        No: index + 1,
+        'Kode Permintaan': t.requestCode,
+        'Nama Pelanggan': t.customerName,
+        'Jenis Transaksi': typeText,
+        'Metode Pembayaran': anyT.paymentMethod || (t.type === 'repair_fee' ? 'Admin / Kas' : 'QRIS / Paywuz'),
+        'Nominal Biaya (Rp)': t.amount,
+        'Status Pembayaran': statusText,
+        'Tanggal & Waktu': new Date(t.createdAt).toLocaleString('id-ID', {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        }),
+      };
+    });
 
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-
     worksheet['!cols'] = [
       { wch: 6 },
       { wch: 18 },
       { wch: 24 },
       { wch: 20 },
+      { wch: 22 },
       { wch: 20 },
-      { wch: 18 },
+      { wch: 22 },
       { wch: 24 },
     ];
 
@@ -1726,7 +2156,7 @@ function AdminTransactions() {
       <PageIntro
         eyebrow="Keuangan operasional"
         title="Transaksi"
-        body="Pantau penerimaan biaya kunjungan dan seluruh biaya perbaikan yang di-input admin dalam satu tempat."
+        body="Pantau status transaksi (berhasil, menunggu, dibatalkan) serta rekonsiliasi penerimaan biaya kunjungan, perbaikan, dan NIDI/SLO secara akurat dan konsisten."
         action={
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -1750,11 +2180,68 @@ function AdminTransactions() {
         }
       />
 
+      {/* Row 1: Status & Volume Overview Cards */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-4">
+        <Stat
+          label="Total Transaksi"
+          value={String(allRows.length)}
+          note="semua transaksi"
+          icon={ReceiptText}
+          accent="blue"
+        />
+        <Stat
+          label="Berhasil / Lunas"
+          value={String(paidRows.length)}
+          note="pembayaran terverifikasi"
+          icon={CheckCircle2}
+          accent="green"
+        />
+        <Stat
+          label="Menunggu"
+          value={String(pendingRows.length)}
+          note="menunggu pembayaran / QRIS"
+          icon={Clock3}
+          accent="yellow"
+        />
+        <Stat
+          label="Dibatalkan"
+          value={String(cancelledRows.length)}
+          note="dibatalkan / kadaluarsa"
+          icon={AlertTriangle}
+          accent="orange"
+        />
+      </div>
+
+      {/* Row 2: Financial Metrics Overview Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
-        <Stat label="Total Transaksi" value={String(allRows.length)} note="semua transaksi" icon={ReceiptText} />
-        <Stat label="Biaya Perbaikan" value={rupiah(totalRepairFees)} note="total di-input admin" icon={Wrench} accent="yellow" />
-        <Stat label="Biaya Kunjungan" value={rupiah(totalVisitFees)} note="pembayaran awal" icon={MapPin} accent="yellow" />
-        <Stat label="Sudah Dibayar" value={rupiah(totalPaid)} note="penerimaan tercatat" icon={Banknote} accent="green" />
+        <Stat
+          label="Sudah Dibayar"
+          value={rupiah(totalPaid)}
+          note="penerimaan tercatat"
+          icon={Banknote}
+          accent="green"
+        />
+        <Stat
+          label="Biaya Perbaikan"
+          value={rupiah(totalRepairFees)}
+          note="total di-input admin"
+          icon={Wrench}
+          accent="yellow"
+        />
+        <Stat
+          label="Biaya Kunjungan"
+          value={rupiah(totalVisitFees)}
+          note="pembayaran awal"
+          icon={MapPin}
+          accent="blue"
+        />
+        <Stat
+          label="Biaya NIDI & SLO"
+          value={rupiah(totalNidiSloFees)}
+          note="paket daya TR"
+          icon={Zap}
+          accent="purple"
+        />
       </div>
 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-3.5 shadow-sm">
@@ -1791,7 +2278,7 @@ function AdminTransactions() {
         <div className="panel-head flex-wrap gap-3">
           <div>
             <h3>Riwayat Transaksi</h3>
-            <p className="text-xs text-muted-foreground">Filter periode & jenis transaksi untuk tinjauan lebih spesifik.</p>
+            <p className="text-xs text-muted-foreground">Filter periode, status, dan jenis transaksi secara akurat.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="filter-tabs">
@@ -1813,7 +2300,7 @@ function AdminTransactions() {
         </div>
 
         {period === 'custom' && (
-          <div className="date-filter">
+          <div className="date-filter mb-4">
             <Field label="Dari">
               <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} data-testid="input-transaction-from" />
             </Field>
@@ -1823,22 +2310,44 @@ function AdminTransactions() {
           </div>
         )}
 
+        {/* Filter Bar: Status Filters, Type Filters, and Search */}
         <div className="filter-bar border-t border-border/40 pt-4 flex-wrap gap-3">
-          <div className="filter-tabs">
-            {[
-              ['all', `Semua Jenis (${allRows.length})`],
-              ['repair_fee', `Biaya Perbaikan (${allRows.filter((r) => r.type === 'repair_fee').length})`],
-              ['visit_fee', `Biaya Kunjungan (${allRows.filter((r) => r.type === 'visit_fee').length})`],
-            ].map(([v, l]) => (
-              <button
-                key={v}
-                onClick={() => setTypeFilter(v as typeof typeFilter)}
-                className={typeFilter === v ? 'filter-active' : ''}
-                data-testid={`button-filter-type-${v}`}
-              >
-                {l}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="filter-tabs">
+              {[
+                ['all', `Semua Status (${allRows.length})`],
+                ['paid', `Berhasil (${paidRows.length})`],
+                ['pending', `Menunggu (${pendingRows.length})`],
+                ['cancelled', `Dibatalkan (${cancelledRows.length})`],
+              ].map(([v, l]) => (
+                <button
+                  key={v}
+                  onClick={() => setStatusFilter(v as typeof statusFilter)}
+                  className={statusFilter === v ? 'filter-active' : ''}
+                  data-testid={`button-filter-status-${v}`}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+
+            <div className="filter-tabs">
+              {[
+                ['all', `Semua Jenis (${allRows.length})`],
+                ['repair_fee', `Biaya Perbaikan (${repairRows.length})`],
+                ['visit_fee', `Biaya Kunjungan (${visitRows.length})`],
+                ['nidi_slo_fee', `NIDI & SLO (${nidiSloRows.length})`],
+              ].map(([v, l]) => (
+                <button
+                  key={v}
+                  onClick={() => setTypeFilter(v as typeof typeFilter)}
+                  className={typeFilter === v ? 'filter-active' : ''}
+                  data-testid={`button-filter-type-${v}`}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="flex items-center gap-2 ml-auto flex-wrap">
@@ -1883,24 +2392,40 @@ function AdminTransactions() {
               <tbody>
                 {filteredRows.map((t) => {
                   const anyT = t as any;
-                  const payMethod = anyT.paymentMethod || (t.type === 'visit_fee' ? 'QRIS / Paywuz' : 'Admin / Kas');
+                  const payMethod = anyT.paymentMethod || (t.type === 'repair_fee' ? 'Admin / Kas' : 'QRIS / Paywuz');
+                  const isPaid = t.status === 'paid' || anyT.paywuzStatus === 'success';
+                  const isCancelled =
+                    t.status === 'cancelled' ||
+                    t.status === 'failed' ||
+                    t.status === 'expired' ||
+                    t.status === 'rejected';
+
+                  const isNidi = t.type === 'nidi_slo_fee' || anyT.type === 'nidi_slo_fee';
+
                   return (
                     <tr key={t.id} data-testid={`row-transaction-${t.id}`}>
                       <td className="text-xs text-muted-foreground">{time(t.createdAt)}</td>
                       <td>
                         <strong className="block text-xs font-mono text-primary">{t.requestCode}</strong>
                         <span className="text-xs font-semibold text-foreground">{t.customerName}</span>
+                        {anyT.powerVa && (
+                          <span className="block text-[10px] text-muted-foreground font-mono">
+                            Daya: {Number(anyT.powerVa).toLocaleString('id-ID')} VA
+                          </span>
+                        )}
                       </td>
                       <td>
                         <span
                           className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold ${
-                            t.type === 'repair_fee'
+                            isNidi
+                              ? 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-500/20'
+                              : t.type === 'repair_fee'
                               ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20'
                               : 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20'
                           }`}
                         >
-                          {t.type === 'visit_fee' ? <MapPin size={13} /> : <Wrench size={13} />}
-                          {t.type === 'visit_fee' ? 'Biaya Kunjungan' : 'Biaya Perbaikan'}
+                          {isNidi ? <Zap size={13} /> : t.type === 'visit_fee' ? <MapPin size={13} /> : <Wrench size={13} />}
+                          {isNidi ? 'NIDI & SLO' : t.type === 'visit_fee' ? 'Biaya Kunjungan' : 'Biaya Perbaikan'}
                         </span>
                       </td>
                       <td>
@@ -1922,7 +2447,22 @@ function AdminTransactions() {
                       </td>
                       <td className="font-mono text-xs font-bold text-foreground">{rupiah(t.amount)}</td>
                       <td>
-                        <Status value={t.status} />
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold tracking-wide ${
+                            isPaid
+                              ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
+                              : isCancelled
+                              ? 'bg-red-500/15 text-red-700 dark:text-red-400 border border-red-500/30'
+                              : 'bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30'
+                          }`}
+                        >
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${
+                              isPaid ? 'bg-emerald-500' : isCancelled ? 'bg-red-500' : 'bg-amber-500'
+                            }`}
+                          />
+                          {isPaid ? 'Berhasil' : isCancelled ? 'Dibatalkan' : 'Menunggu'}
+                        </span>
                       </td>
                     </tr>
                   );
@@ -1957,17 +2497,17 @@ function AdminUsers() {
   const rows = query.data || [];
   return (
     <AppShell>
-      <PageIntro eyebrow="Akses internal" title="Pengguna dashboard" body="Kelola siapa yang dapat mengatur operasi dan mengirim laporan." action={<Button onClick={() => { setEditing(null); setOpen(true); }} data-testid="button-add-user"><Plus size={16} /> Tambah pengguna</Button>} />
+      <PageIntro eyebrow="Akses internal" title="Pengguna dashboard" body="Kelola akun pengguna, email, dan kata sandi untuk login ke sistem." action={<Button onClick={() => { setEditing(null); setOpen(true); }} data-testid="button-add-user"><Plus size={16} /> Buat Akun Baru</Button>} />
       <section className="panel">
-        <div className="panel-head"><div><h3>{rows.length} pengguna</h3><p className="text-xs text-muted-foreground">Admin dan pekerja yang terdaftar di SEIIKI.</p></div><UsersRound size={18} className="text-muted-foreground" /></div>
+        <div className="panel-head"><div><h3>{rows.length} pengguna terdaftar</h3><p className="text-xs text-muted-foreground">Akun yang dapat login ke dashboard SEIIKI.</p></div><UsersRound size={18} className="text-muted-foreground" /></div>
         <div className="table-scroll">
           <table>
-            <thead><tr><th>Nama</th><th>Kontak</th><th>Peran</th><th>Status</th><th className="text-right">Aksi</th></tr></thead>
+            <thead><tr><th>Username</th><th>Email (Login)</th><th>Peran</th><th>Status</th><th className="text-right">Aksi</th></tr></thead>
             <tbody>
               {rows.map((u) => (
                 <tr key={u.id} data-testid={`row-user-${u.id}`}>
                   <td><span className="flex items-center gap-2.5"><span className="avatar">{u.name.split(' ').map((v) => v[0]).join('').slice(0, 2)}</span><strong className="text-xs">{u.name}</strong></span></td>
-                  <td className="text-xs text-muted-foreground">{u.phone}</td>
+                  <td className="text-xs font-mono text-muted-foreground">{u.email || '-'}</td>
                   <td><Badge tone={u.role === 'admin' ? 'warm' : 'neutral'}>{u.role === 'admin' ? 'Admin' : 'Pekerja'}</Badge></td>
                   <td><Status value={u.status} /></td>
                   <td>
@@ -2007,33 +2547,142 @@ function AdminUsers() {
   );
 }
 function UserDialog({ user, onClose, onSave }: { user: User | null; onClose: () => void; onSave: (data: any) => void }) {
-  const [name, setName] = useState(user?.name || '');
-  const [phone, setPhone] = useState(user?.phone || '');
-  const [role, setRole] = useState<'admin' | 'worker'>(user?.role || 'worker');
+  const [username, setUsername] = useState(user?.name || '');
+  const [email, setEmail] = useState((user as any)?.email || '');
+  const [password, setPassword] = useState((user as any)?.password || '');
   const [status, setStatus] = useState<'active' | 'inactive'>(user?.status || 'active');
-  return <div className="modal-backdrop"><form className="modal" onSubmit={(e) => { e.preventDefault(); onSave(user ? { name, phone, role, status } : { name, phone, role, specialty: role === 'worker' ? 'Teknisi umum' : undefined }); }}><div className="flex items-start justify-between"><div><div className="eyebrow">{user ? 'Edit pengguna' : 'Pengguna baru'}</div><h3>{user ? 'Perbarui akses' : 'Tambah pengguna'}</h3></div><button type="button" className="icon-button" onClick={onClose} data-testid="button-close-user"><X size={17} /></button></div><div className="mt-6 space-y-4"><Field label="Nama"><input required value={name} onChange={(e) => setName(e.target.value)} data-testid="input-user-name" /></Field><Field label="Nomor ponsel"><input required value={phone} onChange={(e) => setPhone(e.target.value)} data-testid="input-user-phone" /></Field><Field label="Peran"><select value={role} onChange={(e) => setRole(e.target.value as typeof role)} data-testid="select-user-role"><option value="worker">Pekerja</option><option value="admin">Admin</option></select></Field>{user && <Field label="Status"><select value={status} onChange={(e) => setStatus(e.target.value as typeof status)} data-testid="select-user-status"><option value="active">Aktif</option><option value="inactive">Nonaktif</option></select></Field>}</div><div className="mt-7 flex justify-end gap-2"><Button type="button" kind="outline" onClick={onClose} data-testid="button-cancel-user">Batal</Button><Button type="submit" data-testid="button-save-user"><Check size={15} /> Simpan pengguna</Button></div></form></div>;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (user) {
+      onSave({
+        name: username.trim(),
+        username: username.trim(),
+        email: email.trim().toLowerCase(),
+        password: password.trim() || undefined,
+        status,
+      });
+    } else {
+      onSave({
+        name: username.trim(),
+        username: username.trim(),
+        email: email.trim().toLowerCase(),
+        password: password.trim(),
+        role: 'worker',
+        status: 'active',
+      });
+    }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <form className="modal max-w-md" onSubmit={handleSubmit}>
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="eyebrow">{user ? 'Edit akun pengguna' : 'Buat Akun Baru'}</div>
+            <h3>{user ? 'Perbarui akses' : 'Tambah pengguna'}</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {user
+                ? 'Kelola username, email, dan kata sandi pengguna.'
+                : 'Isi username, email, dan password untuk membuat akun login baru.'}
+            </p>
+          </div>
+          <button type="button" className="icon-button" onClick={onClose} data-testid="button-close-user">
+            <X size={17} />
+          </button>
+        </div>
+
+        <div className="mt-6 space-y-4">
+          <Field label="Username" hint="Nama tampilan pengguna">
+            <input
+              required
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Contoh: teknisi_budi"
+              data-testid="input-user-username"
+            />
+          </Field>
+
+          <Field label="Email" hint="Email untuk login ke dashboard">
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="nama@domain.com"
+              data-testid="input-user-email"
+            />
+          </Field>
+
+          <Field label="Password" hint={user ? "Kosongkan jika tidak ingin mengubah password" : "Password untuk login ke dashboard"}>
+            <input
+              type="password"
+              required={!user}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={user ? "•••••••• (tidak diubah)" : "Masukkan password login"}
+              data-testid="input-user-password"
+            />
+          </Field>
+
+          {user && (
+            <Field label="Status Akun">
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value as typeof status)}
+                data-testid="select-user-status"
+              >
+                <option value="active">Aktif (Dapat Login)</option>
+                <option value="inactive">Nonaktif (Akses Ditutup)</option>
+              </select>
+            </Field>
+          )}
+        </div>
+
+        <div className="mt-7 flex justify-end gap-2">
+          <Button type="button" kind="outline" onClick={onClose} data-testid="button-cancel-user">
+            Batal
+          </Button>
+          <Button type="submit" data-testid="button-save-user">
+            <Check size={15} /> {user ? 'Simpan perubahan' : 'Buat akun'}
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
 }
 
 function AdminBookingComponent() {
-  const [tab, setTab] = useState<'layanan' | 'formulir' | 'preview'>('layanan');
+  const [tab, setTab] = useState<'layanan' | 'formulir' | 'preview' | 'tarif_nidi_slo'>('layanan');
   const [search, setSearch] = useState('');
+  const [tariffSearch, setTariffSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('Semua');
   const [serviceModalOpen, setServiceModalOpen] = useState(false);
   const [editingService, setEditingService] = useState<BookingService | null>(null);
   const [deletingService, setDeletingService] = useState<BookingService | null>(null);
+  const [tariffModalOpen, setTariffModalOpen] = useState(false);
+  const [editingTariff, setEditingTariff] = useState<NidiSloTariff | null>(null);
+  const [deletingTariff, setDeletingTariff] = useState<NidiSloTariff | null>(null);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const [resetTariffsConfirmOpen, setResetTariffsConfirmOpen] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
 
   // Queries & Mutations
   const configQuery = useGetBookingConfig();
   const servicesQuery = useListBookingServices();
+  const tariffsQuery = useListNidiSloTariffs();
   const updateConfig = useUpdateBookingConfig();
   const createService = useCreateBookingService();
   const updateService = useUpdateBookingService();
   const deleteService = useDeleteBookingService();
+  const createTariff = useCreateNidiSloTariff();
+  const updateTariff = useUpdateNidiSloTariff();
+  const deleteTariff = useDeleteNidiSloTariff();
+  const resetTariffs = useResetNidiSloTariffs();
 
   const config = configQuery.data || DEFAULT_BOOKING_CONFIG;
   const services = servicesQuery.data || DEFAULT_BOOKING_SERVICES;
+  const tariffs = tariffsQuery.data || [];
 
   // Local Form state for Tab 2
   const [configForm, setConfigForm] = useState<BookingConfig>(config);
@@ -2197,6 +2846,20 @@ function AdminBookingComponent() {
         >
           <Eye size={15} />
           <span>Live Preview Pelanggan</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setTab('tarif_nidi_slo')}
+          className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+            tab === 'tarif_nidi_slo'
+              ? 'bg-primary text-primary-foreground shadow-sm'
+              : 'bg-card text-muted-foreground hover:bg-muted hover:text-foreground'
+          }`}
+          data-testid="tab-booking-nidi-slo-tariffs"
+        >
+          <Zap size={15} />
+          <span>Tarif NIDI & SLO ({tariffs.length})</span>
         </button>
       </div>
 
@@ -2677,6 +3340,192 @@ function AdminBookingComponent() {
         </section>
       )}
 
+      {/* TAB 4: TARIF NIDI & SLO */}
+      {tab === 'tarif_nidi_slo' && (
+        <section className="space-y-6 rise-in">
+          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex size-6 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xs font-black">⚡</span>
+                <h3 className="text-base font-bold">Rekap Harga SLO & Supervisi NIDI Tegangan Rendah (TR)</h3>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Daftar 24 golongan daya listrik, biaya SLO resmi, supervisi NIDI, dan total tarif paket pelanggan.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="search-field !mt-0">
+                <Search size={14} />
+                <input
+                  type="text"
+                  value={tariffSearch}
+                  onChange={(e) => setTariffSearch(e.target.value)}
+                  placeholder="Cari daya (VA) / keterangan..."
+                  className="!text-xs !py-1.5"
+                  data-testid="input-search-admin-tariffs"
+                />
+              </div>
+
+              <Button
+                variant="outline"
+                onClick={() => setResetTariffsConfirmOpen(true)}
+                className="!px-3.5 !py-2 text-xs whitespace-nowrap text-amber-600 dark:text-amber-400"
+                data-testid="button-reset-tariffs-seeder-tab"
+              >
+                <RotateCcw size={14} /> Muat Ulang Seeder (24 Daya)
+              </Button>
+
+              <Button
+                onClick={() => {
+                  setEditingTariff(null);
+                  setTariffModalOpen(true);
+                }}
+                className="!px-3.5 !py-2 text-xs whitespace-nowrap"
+                data-testid="button-add-tariff"
+              >
+                <Plus size={15} /> Tambah Golongan Daya
+              </Button>
+            </div>
+          </div>
+
+          {tariffsQuery.isLoading ? (
+            <LoadingRows />
+          ) : (
+            <div className="table-scroll rounded-2xl border border-border bg-card">
+              <table>
+                <thead>
+                  <tr>
+                    <th className="w-12 text-center">No.</th>
+                    <th>Golongan Daya (VA)</th>
+                    <th>Biaya SLO (Rp)</th>
+                    <th>Biaya Supervisi NIDI (Rp)</th>
+                    <th>Total Biaya (Rp)</th>
+                    <th>Rumus / Keterangan</th>
+                    <th>Status</th>
+                    <th className="text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tariffs
+                    .filter((t) => {
+                      if (!tariffSearch.trim()) return true;
+                      const q = tariffSearch.toLowerCase();
+                      return (
+                        t.powerLabel.toLowerCase().includes(q) ||
+                        String(t.powerVa).includes(q) ||
+                        (t.notes && t.notes.toLowerCase().includes(q))
+                      );
+                    })
+                    .map((t, idx) => (
+                      <tr key={t.id} data-testid={`row-admin-tariff-${t.id}`}>
+                        <td className="text-center font-mono text-xs text-muted-foreground">
+                          {t.sortOrder || idx + 1}
+                        </td>
+                        <td>
+                          <span className="font-bold text-foreground text-xs">{t.powerLabel}</span>
+                          <span className="block text-[11px] font-mono text-muted-foreground">
+                            {t.powerVa.toLocaleString('id-ID')} VA
+                          </span>
+                        </td>
+                        <td className="font-mono text-xs font-semibold text-foreground">
+                          {rupiah(t.sloFee)}
+                        </td>
+                        <td className="font-mono text-xs font-semibold text-foreground">
+                          {rupiah(t.nidiFee)}
+                        </td>
+                        <td className="font-mono text-xs font-bold text-primary">
+                          {rupiah(t.totalFee)}
+                        </td>
+                        <td className="text-[11px] text-muted-foreground max-w-xs">
+                          {t.notes || '-'}
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateTariff.mutate({
+                                id: t.id,
+                                data: { isActive: t.isActive === 1 ? 0 : 1 },
+                              })
+                            }
+                            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                              t.isActive === 1
+                                ? 'bg-emerald-500/10 text-emerald-600'
+                                : 'bg-muted text-muted-foreground'
+                            }`}
+                            data-testid={`toggle-tariff-active-${t.id}`}
+                          >
+                            {t.isActive === 1 ? 'Aktif' : 'Nonaktif'}
+                          </button>
+                        </td>
+                        <td className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              className="icon-button"
+                              onClick={() => {
+                                setEditingTariff(t);
+                                setTariffModalOpen(true);
+                              }}
+                              title="Edit Tarif"
+                              data-testid={`button-edit-tariff-${t.id}`}
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button
+                              className="icon-button icon-danger"
+                              onClick={() => setDeletingTariff(t)}
+                              title="Hapus Tarif"
+                              data-testid={`button-delete-tariff-${t.id}`}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* TARIFF MODAL DIALOG */}
+      {tariffModalOpen && (
+        <TariffDialog
+          tariff={editingTariff}
+          onClose={() => {
+            setTariffModalOpen(false);
+            setEditingTariff(null);
+          }}
+          onSave={(data) => {
+            if (editingTariff) {
+              updateTariff.mutate(
+                { id: editingTariff.id, data },
+                {
+                  onSuccess: () => {
+                    setTariffModalOpen(false);
+                    setEditingTariff(null);
+                    setSaveSuccessMsg(`Tarif daya "${data.powerLabel || editingTariff.powerLabel}" berhasil diperbarui.`);
+                    setTimeout(() => setSaveSuccessMsg(null), 4000);
+                  },
+                }
+              );
+            } else {
+              createTariff.mutate(data, {
+                onSuccess: () => {
+                  setTariffModalOpen(false);
+                  setEditingTariff(null);
+                  setSaveSuccessMsg(`Tarif daya baru berhasil ditambahkan.`);
+                  setTimeout(() => setSaveSuccessMsg(null), 4000);
+                },
+              });
+            }
+          }}
+        />
+      )}
+
       {/* SERVICE MODAL DIALOG */}
       {serviceModalOpen && (
         <ServiceDialog
@@ -2733,7 +3582,216 @@ function AdminBookingComponent() {
           onClose={() => setDeletingService(null)}
         />
       )}
+
+      {deletingTariff && (
+        <ConfirmModal
+          title={`Hapus Golongan Daya "${deletingTariff.powerLabel}"`}
+          message={`Apakah Anda yakin ingin menghapus tarif daya "${deletingTariff.powerLabel}" (${deletingTariff.powerVa.toLocaleString('id-ID')} VA) dari daftar rekap harga NIDI & SLO?`}
+          confirmText="Hapus Tarif"
+          kind="danger"
+          onConfirm={() => {
+            deleteTariff.mutate(deletingTariff.id, {
+              onSuccess: () => {
+                setDeletingTariff(null);
+                setSaveSuccessMsg(`Tarif "${deletingTariff.powerLabel}" berhasil dihapus.`);
+                setTimeout(() => setSaveSuccessMsg(null), 4000);
+              },
+            });
+          }}
+          onClose={() => setDeletingTariff(null)}
+        />
+      )}
+
+      {resetTariffsConfirmOpen && (
+        <ConfirmModal
+          title="Muat Ulang Seeder Resmi 24 Tarif?"
+          message="Apakah Anda yakin ingin memuat ulang 24 golongan daya resmi NIDI & SLO sesuai standar pemerintah? Perubahan manual sebelumnya akan diperbarui dengan data baku seeder."
+          confirmText="Muat Ulang 24 Tarif"
+          kind="danger"
+          onConfirm={() => {
+            resetTariffs.mutate(undefined, {
+              onSuccess: () => {
+                setResetTariffsConfirmOpen(false);
+                setSaveSuccessMsg('24 Golongan daya resmi NIDI & SLO berhasil dimuat ulang!');
+                setTimeout(() => setSaveSuccessMsg(null), 4000);
+              },
+            });
+          }}
+          onClose={() => setResetTariffsConfirmOpen(false)}
+        />
+      )}
     </AppShell>
+  );
+}
+
+function TariffDialog({
+  tariff,
+  onClose,
+  onSave,
+}: {
+  tariff: NidiSloTariff | null;
+  onClose: () => void;
+  onSave: (data: Partial<NidiSloTariff>) => void;
+}) {
+  const [sortOrder, setSortOrder] = useState<number>(tariff?.sortOrder ?? 1);
+  const [powerVa, setPowerVa] = useState<string>(tariff?.powerVa ? String(tariff.powerVa) : '');
+  const [powerLabel, setPowerLabel] = useState<string>(tariff?.powerLabel || '');
+  const [sloFee, setSloFee] = useState<string>(tariff?.sloFee !== undefined ? String(tariff.sloFee) : '');
+  const [nidiFee, setNidiFee] = useState<string>(tariff?.nidiFee !== undefined ? String(tariff.nidiFee) : '');
+  const [notes, setNotes] = useState<string>(tariff?.notes || '');
+  const [isActive, setIsActive] = useState<number>(tariff?.isActive ?? 1);
+
+  const totalFeeCalc = (Number(sloFee) || 0) + (Number(nidiFee) || 0);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!powerVa || !powerLabel) return;
+    onSave({
+      sortOrder: Number(sortOrder),
+      powerVa: Number(powerVa),
+      powerLabel: powerLabel.trim(),
+      sloFee: Number(sloFee) || 0,
+      nidiFee: Number(nidiFee) || 0,
+      totalFee: totalFeeCalc,
+      notes: notes.trim() || undefined,
+      isActive,
+    });
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <form className="modal max-w-lg" onSubmit={handleSubmit}>
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="eyebrow">{tariff ? 'Edit Tarif Golongan Daya' : 'Tambah Golongan Daya'}</div>
+            <h3 className="text-base font-bold">
+              {tariff ? `Tarif Daya ${tariff.powerLabel}` : 'Golongan Daya Baru'}
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Kelola besaran biaya SLO dan Supervisi NIDI untuk golongan daya ini.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="icon-button"
+            onClick={onClose}
+            data-testid="button-close-tariff-dialog"
+          >
+            <X size={17} />
+          </button>
+        </div>
+
+        <div className="mt-5 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Nomor Urut (Sort)" hint="Contoh: 1, 2, 3...">
+              <input
+                type="number"
+                required
+                min="1"
+                value={sortOrder}
+                onChange={(e) => setSortOrder(Number(e.target.value))}
+                data-testid="input-tariff-sort-order"
+              />
+            </Field>
+
+            <Field label="Daya Listrik (VA)" hint="Angka saja (Contoh: 1300)">
+              <input
+                type="number"
+                required
+                min="1"
+                value={powerVa}
+                onChange={(e) => {
+                  setPowerVa(e.target.value);
+                  if (!powerLabel || powerLabel.endsWith('VA')) {
+                    const num = Number(e.target.value);
+                    if (num) setPowerLabel(`${num.toLocaleString('id-ID')} VA`);
+                  }
+                }}
+                placeholder="1300"
+                data-testid="input-tariff-power-va"
+              />
+            </Field>
+          </div>
+
+          <Field label="Label Tampilan Daya" hint="Contoh: 1.300 VA">
+            <input
+              type="text"
+              required
+              value={powerLabel}
+              onChange={(e) => setPowerLabel(e.target.value)}
+              placeholder="1.300 VA"
+              data-testid="input-tariff-power-label"
+            />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Biaya SLO (Rp)" hint="Nominal SLO">
+              <input
+                type="number"
+                required
+                min="0"
+                step="500"
+                value={sloFee}
+                onChange={(e) => setSloFee(e.target.value)}
+                placeholder="120000"
+                data-testid="input-tariff-slo-fee"
+              />
+            </Field>
+
+            <Field label="Biaya Supervisi NIDI (Rp)" hint="Nominal Supervisi NIDI">
+              <input
+                type="number"
+                required
+                min="0"
+                step="500"
+                value={nidiFee}
+                onChange={(e) => setNidiFee(e.target.value)}
+                placeholder="130000"
+                data-testid="input-tariff-nidi-fee"
+              />
+            </Field>
+          </div>
+
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 flex items-center justify-between text-xs">
+            <span className="font-bold text-foreground">Total Biaya Pelanggan:</span>
+            <span className="font-mono text-sm font-black text-primary">
+              {rupiah(totalFeeCalc)}
+            </span>
+          </div>
+
+          <Field label="Rumus / Catatan Penjelasan" hint="Opsional (contoh: SLO Rp35/VA, NIDI Rp100/VA)">
+            <input
+              type="text"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Contoh: Tarif tetap TR 1.300 VA"
+              data-testid="input-tariff-notes"
+            />
+          </Field>
+
+          <div className="flex items-center justify-between rounded-xl border border-border bg-muted/30 p-3">
+            <span className="text-xs font-medium">Status Tampil di Form Pelanggan</span>
+            <button
+              type="button"
+              onClick={() => setIsActive(isActive === 1 ? 0 : 1)}
+              className="text-primary"
+              data-testid="toggle-tariff-status"
+            >
+              {isActive === 1 ? <ToggleRight size={24} /> : <ToggleLeft size={24} className="text-muted-foreground" />}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-6 flex items-center justify-end gap-2 border-t border-border pt-4">
+          <Button type="button" kind="outline" onClick={onClose} data-testid="button-cancel-tariff">
+            Batal
+          </Button>
+          <Button type="submit" data-testid="button-save-tariff">
+            <Save size={14} /> Simpan Tarif
+          </Button>
+        </div>
+      </form>
+    </div>
   );
 }
 
@@ -4349,6 +5407,7 @@ function AdminHomeRoute() { return <AuthGate role="admin"><AdminHome /></AuthGat
 function AdminRequestsRoute() { return <AuthGate role="admin"><AdminRequests /></AuthGate>; }
 function AdminAssignmentHistoryRoute() { return <AuthGate role="admin"><AdminAssignmentHistory /></AuthGate>; }
 function AdminReportsRoute() { return <AuthGate role="admin"><AdminReports /></AuthGate>; }
+function AdminSettingsRoute() { return <AuthGate role="admin"><AppShell><AdminSettings /></AppShell></AuthGate>; }
 function AdminCmsRoute() { return <AuthGate role="admin"><AppShell><AdminCms /></AppShell></AuthGate>; }
 function AdminBookingComponentRoute() { return <AuthGate role="admin"><AdminBookingComponent /></AuthGate>; }
 function AdminTransactionsRoute() { return <AuthGate role="admin"><AdminTransactions /></AuthGate>; }
@@ -4368,6 +5427,7 @@ function AppRoutes() {
         <Route path="/admin/requests" component={AdminRequestsRoute} />
         <Route path="/admin/assignment-history" component={AdminAssignmentHistoryRoute} />
         <Route path="/admin/reports" component={AdminReportsRoute} />
+        <Route path="/admin/settings" component={AdminSettingsRoute} />
         <Route path="/admin/cms" component={AdminCmsRoute} />
         <Route path="/admin/booking-component" component={AdminBookingComponentRoute} />
         <Route path="/admin/locations" component={AdminLocationsRoute} />

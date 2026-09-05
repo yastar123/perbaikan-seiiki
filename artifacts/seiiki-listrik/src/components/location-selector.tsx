@@ -452,6 +452,10 @@ export function HierarchicalLocationSelector({
           </div>
         </div>
       )}
+
+      <p className="text-[11px] text-muted-foreground/80 italic">
+        <span className="text-destructive font-semibold">*</span> Wilayah yang tidak tercantum pada pilihan Langkah 1 s/d 4 di atas tidak dapat dilayani.
+      </p>
     </div>
   );
 }

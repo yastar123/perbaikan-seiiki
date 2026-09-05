@@ -17,6 +17,40 @@ const router: IRouter = Router();
 async function getOrInitCms(): Promise<any> {
   const [existing] = await db.select().from(landingCmsTable).limit(1);
   if (existing) {
+    let hasChanges = false;
+    const updatedData: any = {};
+
+    if (existing.flow?.titleLine1 === "Rapi sejak" && existing.flow?.titleLine2Accent === "pesan pertama.") {
+      updatedData.flow = {
+        ...existing.flow,
+        titleLine1: "JASA KETENAGALISTRIKAN",
+        titleLine2Accent: "LAMPUNG",
+      };
+      hasChanges = true;
+    }
+
+    // Ensure 'Hubungi Admin WhatsApp' is removed from footer links
+    if (existing.footer?.links && Array.isArray(existing.footer.links)) {
+      const filteredLinks = existing.footer.links.filter(
+        (l: any) => !l.label?.toLowerCase().includes("hubungi admin whatsapp")
+      );
+      if (filteredLinks.length !== existing.footer.links.length) {
+        updatedData.footer = {
+          ...existing.footer,
+          links: filteredLinks,
+        };
+        hasChanges = true;
+      }
+    }
+
+    if (hasChanges) {
+      const [updated] = await db
+        .update(landingCmsTable)
+        .set({ ...updatedData, updatedAt: new Date() })
+        .where(eq(landingCmsTable.id, existing.id))
+        .returning();
+      return updated;
+    }
     return existing;
   }
   const [created] = await db

@@ -1,15 +1,84 @@
-import { count } from "drizzle-orm";
+import { count, inArray, eq, or } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   bookingConfigTable,
   bookingServicesTable,
   dashboardUsersTable,
   fieldReportsTable,
+  nidiSloTariffsTable,
   serviceRequestsTable,
   transactionsTable,
 } from "@workspace/db";
 
+export const DEFAULT_NIDI_SLO_TARIFFS = [
+  { sortOrder: 1, powerVa: 450, powerLabel: "450 VA", sloFee: 40000, nidiFee: 45000, totalFee: 85000, notes: "Tarif tetap per golongan daya (TR 450 VA)" },
+  { sortOrder: 2, powerVa: 900, powerLabel: "900 VA", sloFee: 60000, nidiFee: 90000, totalFee: 150000, notes: "Tarif tetap per golongan daya (TR 900 VA)" },
+  { sortOrder: 3, powerVa: 1300, powerLabel: "1.300 VA", sloFee: 120000, nidiFee: 130000, totalFee: 250000, notes: "Tarif tetap per golongan daya (TR 1.300 VA)" },
+  { sortOrder: 4, powerVa: 2200, powerLabel: "2.200 VA", sloFee: 135000, nidiFee: 220000, totalFee: 355000, notes: "Tarif tetap per golongan daya (TR 2.200 VA)" },
+  { sortOrder: 5, powerVa: 3500, powerLabel: "3.500 VA", sloFee: 122500, nidiFee: 350000, totalFee: 472500, notes: "SLO: 3.500 VA × Rp35/VA | NIDI: 3.500 VA × Rp100/VA" },
+  { sortOrder: 6, powerVa: 4400, powerLabel: "4.400 VA", sloFee: 154000, nidiFee: 440000, totalFee: 594000, notes: "SLO: 4.400 VA × Rp35/VA | NIDI: 4.400 VA × Rp100/VA" },
+  { sortOrder: 7, powerVa: 5500, powerLabel: "5.500 VA", sloFee: 192500, nidiFee: 550000, totalFee: 742500, notes: "SLO: 5.500 VA × Rp35/VA | NIDI: 5.500 VA × Rp100/VA" },
+  { sortOrder: 8, powerVa: 6600, powerLabel: "6.600 VA", sloFee: 231000, nidiFee: 660000, totalFee: 891000, notes: "SLO: 6.600 VA × Rp35/VA | NIDI: 6.600 VA × Rp100/VA" },
+  { sortOrder: 9, powerVa: 7700, powerLabel: "7.700 VA", sloFee: 269500, nidiFee: 770000, totalFee: 1039500, notes: "SLO: 7.700 VA × Rp35/VA | NIDI: 7.700 VA × Rp100/VA" },
+  { sortOrder: 10, powerVa: 10600, powerLabel: "10.600 VA", sloFee: 318000, nidiFee: 1060000, totalFee: 1378000, notes: "SLO: 10.600 VA × Rp30/VA | NIDI: 10.600 VA × Rp100/VA" },
+  { sortOrder: 11, powerVa: 11000, powerLabel: "11.000 VA", sloFee: 330000, nidiFee: 1100000, totalFee: 1430000, notes: "SLO: 11.000 VA × Rp30/VA | NIDI: 11.000 VA × Rp100/VA" },
+  { sortOrder: 12, powerVa: 13200, powerLabel: "13.200 VA", sloFee: 396000, nidiFee: 1320000, totalFee: 1716000, notes: "SLO: 13.200 VA × Rp30/VA | NIDI: 13.200 VA × Rp100/VA" },
+  { sortOrder: 13, powerVa: 16500, powerLabel: "16.500 VA", sloFee: 495000, nidiFee: 1650000, totalFee: 2145000, notes: "SLO: 16.500 VA × Rp30/VA | NIDI: 16.500 VA × Rp100/VA" },
+  { sortOrder: 14, powerVa: 23000, powerLabel: "23.000 VA", sloFee: 690000, nidiFee: 2300000, totalFee: 2990000, notes: "SLO: 23.000 VA × Rp30/VA | NIDI: 23.000 VA × Rp100/VA" },
+  { sortOrder: 15, powerVa: 33000, powerLabel: "33.000 VA", sloFee: 825000, nidiFee: 2475000, totalFee: 3300000, notes: "SLO: 33.000 VA × Rp25/VA | NIDI: 33.000 VA × Rp75/VA" },
+  { sortOrder: 16, powerVa: 41500, powerLabel: "41.500 VA", sloFee: 1037500, nidiFee: 3112500, totalFee: 4150000, notes: "SLO: 41.500 VA × Rp25/VA | NIDI: 41.500 VA × Rp75/VA" },
+  { sortOrder: 17, powerVa: 53000, powerLabel: "53.000 VA", sloFee: 1325000, nidiFee: 3975000, totalFee: 5300000, notes: "SLO: 53.000 VA × Rp25/VA | NIDI: 53.000 VA × Rp75/VA" },
+  { sortOrder: 18, powerVa: 66000, powerLabel: "66.000 VA", sloFee: 1650000, nidiFee: 4950000, totalFee: 6600000, notes: "SLO: 66.000 VA × Rp25/VA | NIDI: 66.000 VA × Rp75/VA" },
+  { sortOrder: 19, powerVa: 82500, powerLabel: "82.500 VA", sloFee: 1650000, nidiFee: 4950000, totalFee: 6600000, notes: "Batas bawah golongan tarif SLO disesuaikan dengan data Supervisi NIDI" },
+  { sortOrder: 20, powerVa: 105000, powerLabel: "105.000 VA", sloFee: 2100000, nidiFee: 6300000, totalFee: 8400000, notes: "SLO: 105.000 VA × Rp20/VA | NIDI: 105.000 VA × Rp60/VA" },
+  { sortOrder: 21, powerVa: 131000, powerLabel: "131.000 VA", sloFee: 2620000, nidiFee: 7860000, totalFee: 10480000, notes: "SLO: 131.000 VA × Rp20/VA | NIDI: 131.000 VA × Rp60/VA" },
+  { sortOrder: 22, powerVa: 147000, powerLabel: "147.000 VA", sloFee: 2940000, nidiFee: 8820000, totalFee: 11760000, notes: "SLO: 147.000 VA × Rp20/VA | NIDI: 147.000 VA × Rp60/VA" },
+  { sortOrder: 23, powerVa: 164000, powerLabel: "164.000 VA", sloFee: 3280000, nidiFee: 9840000, totalFee: 13120000, notes: "SLO: 164.000 VA × Rp20/VA | NIDI: 164.000 VA × Rp60/VA" },
+  { sortOrder: 24, powerVa: 197000, powerLabel: "197.000 VA", sloFee: 3940000, nidiFee: 11820000, totalFee: 15760000, notes: "SLO: 197.000 VA × Rp20/VA | NIDI: 197.000 VA × Rp60/VA" },
+];
+
 export async function seedDemoData(): Promise<void> {
+  // 1. Clean up legacy dummy demo requests, transactions, and reports
+  try {
+    const dummyCodes = ["SEI-260829-101", "SEI-260829-102", "SEI-260828-099"];
+    const dummyRequests = await db
+      .select()
+      .from(serviceRequestsTable)
+      .where(
+        or(
+          inArray(serviceRequestsTable.code, dummyCodes),
+          inArray(serviceRequestsTable.customerName, ["Budi Santoso", "Nadia Putri", "Andi Wijaya"])
+        )
+      );
+
+    if (dummyRequests.length > 0) {
+      const dummyReqIds = dummyRequests.map((r: any) => r.id);
+      await db
+        .delete(fieldReportsTable)
+        .where(inArray(fieldReportsTable.requestId, dummyReqIds));
+      await db
+        .delete(transactionsTable)
+        .where(inArray(transactionsTable.requestId, dummyReqIds));
+      await db
+        .delete(serviceRequestsTable)
+        .where(inArray(serviceRequestsTable.id, dummyReqIds));
+      console.log(`[Seed] Cleaned up ${dummyRequests.length} legacy dummy request(s).`);
+    }
+
+    // Clean up legacy dummy worker users
+    await db
+      .delete(dashboardUsersTable)
+      .where(
+        or(
+          inArray(dashboardUsersTable.email, ["raka@seiiki.id", "dimas@seiiki.id"]),
+          inArray(dashboardUsersTable.name, ["Raka Pratama", "Dimas Saputra"])
+        )
+      );
+  } catch (cleanErr) {
+    console.warn("[Seed] Note during dummy data cleanup:", cleanErr);
+  }
+
+  // 2. Ensure initial Admin account exists
   const [{ value: userCount }] = await db
     .select({ value: count() })
     .from(dashboardUsersTable);
@@ -28,27 +97,10 @@ export async function seedDemoData(): Promise<void> {
         specialty: "Operasional",
         status: "active",
       },
-      {
-        name: "Raka Pratama",
-        phone: "0812 9000 1122",
-        email: "raka@seiiki.id",
-        password: "password123",
-        role: "worker",
-        specialty: "Instalasi & panel",
-        status: "active",
-      },
-      {
-        name: "Dimas Saputra",
-        phone: "0813 5550 7788",
-        email: "dimas@seiiki.id",
-        password: "password123",
-        role: "worker",
-        specialty: "Perbaikan rumah",
-        status: "active",
-      },
     ]);
   }
 
+  // 3. Ensure booking form default configuration exists
   const [{ value: configCount }] = await db
     .select({ value: count() })
     .from(bookingConfigTable);
@@ -75,136 +127,68 @@ export async function seedDemoData(): Promise<void> {
     });
   }
 
-  const [{ value: serviceCount }] = await db
-    .select({ value: count() })
-    .from(bookingServicesTable);
+  // 4. Ensure master service categories exist (3 layanan utama)
+  const existingServices = await db.select().from(bookingServicesTable);
+  const targetServices = [
+    {
+      name: "Perbaikan Listrik Rumah",
+      category: "Perbaikan",
+      description: "Penanganan korsleting, MCB trip / jeglek, perbaikan instalasi rumah, kabel terbakar, dan stop kontak mati.",
+      estimatedPrice: null,
+      estimatedDuration: "1 - 2 Jam",
+      icon: "Wrench",
+      isActive: 1,
+      sortOrder: 1,
+    },
+    {
+      name: "Pasang Baru",
+      category: "Pemasangan",
+      description: "Pemasangan instalasi listrik baru untuk rumah, ruko, bangunan baru, penambahan titik listrik & panel distribusi.",
+      estimatedPrice: null,
+      estimatedDuration: "1 - 3 Jam",
+      icon: "Plus",
+      isActive: 1,
+      sortOrder: 2,
+    },
+    {
+      name: "NIDI dan SLO",
+      category: "Sertifikasi",
+      description: "Penerbitan Nomor Identitas Instalasi Tenaga Listrik (NIDI) & Sertifikat Laik Operasi (SLO) Tegangan Rendah (TR) resmi.",
+      estimatedPrice: null,
+      estimatedDuration: "1 - 3 Hari Kerja",
+      icon: "Zap",
+      isActive: 1,
+      sortOrder: 3,
+    },
+  ];
 
-  if (Number(serviceCount) === 0) {
-    await db.insert(bookingServicesTable).values([
-      {
-        name: "Perbaikan listrik rumah",
-        category: "Perbaikan",
-        description: "Penanganan korsleting, MCB trip / sering jeglek, kabel panas, dan stop kontak mati.",
-        estimatedPrice: null,
-        estimatedDuration: "1 - 2 Jam",
-        icon: "Wrench",
-        isActive: 1,
-        sortOrder: 1,
-      },
-      {
-        name: "Instalasi titik listrik",
-        category: "Pemasangan",
-        description: "Penambahan stop kontak baru, saklar lampu, kabel rapi, dan jalur peralatan elektronik.",
-        estimatedPrice: null,
-        estimatedDuration: "1 - 3 Jam",
-        icon: "Plus",
-        isActive: 1,
-        sortOrder: 2,
-      },
-      {
-        name: "Pemeriksaan instalasi",
-        category: "Pemeriksaan",
-        description: "Audit menyeluruh kelaikan instalasi listrik, kebocoran arus grounding, dan beban trafo/MCB.",
-        estimatedPrice: null,
-        estimatedDuration: "2 - 3 Jam",
-        icon: "ShieldCheck",
-        isActive: 1,
-        sortOrder: 3,
-      },
-      {
-        name: "Perbaikan panel / MCB",
-        category: "Panel & Daya",
-        description: "Penggantian MCB rusak, upgrade pembagian grup sirkuit panel, dan instalasi ELCB/RCCB anti-setrum.",
-        estimatedPrice: null,
-        estimatedDuration: "1 - 2 Jam",
-        icon: "Activity",
-        isActive: 1,
-        sortOrder: 4,
-      },
-    ]);
-  }
-
-  const [{ value: requestCount }] = await db
-    .select({ value: count() })
-    .from(serviceRequestsTable);
-
-  if (Number(requestCount) === 0) {
-    const [first] = await db
-      .insert(serviceRequestsTable)
-      .values({
-        code: "SEI-260829-101",
-        customerName: "Budi Santoso",
-        whatsapp: "0812 3456 7890",
-        address: "Jl. Kemang Raya No. 14, Jakarta Selatan",
-        latitude: -6.2607,
-        longitude: 106.8106,
-        serviceType: "Perbaikan listrik rumah",
-        notes: "MCB sering turun saat AC menyala.",
-        status: "paid",
-        paymentStatus: "paid",
-        visitFee: 25000,
-      })
-      .returning();
-
-    await db.insert(serviceRequestsTable).values([
-      {
-        code: "SEI-260829-102",
-        customerName: "Nadia Putri",
-        whatsapp: "0821 9087 6677",
-        address: "Perumahan Citra Garden, Blok D7",
-        latitude: -6.1472,
-        longitude: 106.7056,
-        serviceType: "Instalasi lampu & saklar",
-        notes: "Butuh pemasangan 4 titik lampu.",
-        status: "assigned",
-        paymentStatus: "paid",
-        visitFee: 25000,
-        assignedWorkerId: 1,
-      },
-      {
-        code: "SEI-260828-099",
-        customerName: "Andi Wijaya",
-        whatsapp: "0857 2012 3344",
-        address: "Jl. Tebet Barat Dalam, Jakarta Selatan",
-        latitude: -6.2382,
-        longitude: 106.8568,
-        serviceType: "Cek instalasi listrik",
-        notes: "Pemeriksaan jalur listrik sebelum renovasi.",
-        status: "completed",
-        paymentStatus: "paid",
-        visitFee: 25000,
-        repairCost: 450000,
-        assignedWorkerId: 2,
-      },
-    ]);
-
-    if (first) {
-      await db.insert(transactionsTable).values({
-        requestId: first.id,
-        requestCode: first.code,
-        customerName: first.customerName,
-        type: "visit_fee",
-        amount: 25000,
-        status: "paid",
-      });
+  if (existingServices.length === 0) {
+    await db.insert(bookingServicesTable).values(targetServices);
+  } else {
+    // Ensure the 3 core services are in the database
+    for (const ts of targetServices) {
+      const match = existingServices.find(
+        (s) => s.name.toLowerCase() === ts.name.toLowerCase()
+      );
+      if (!match) {
+        await db.insert(bookingServicesTable).values(ts);
+      }
     }
   }
 
-  const [{ value: reportCount }] = await db
+  // 5. Ensure NIDI & SLO 24 Tariffs exist
+  const [{ value: tariffCount }] = await db
     .select({ value: count() })
-    .from(fieldReportsTable);
+    .from(nidiSloTariffsTable);
 
-  if (Number(reportCount) === 0) {
-    const requests = await db.select().from(serviceRequestsTable);
-    if (requests.length > 0) {
-      const targetReq = requests.find((r) => r.status === "completed") || requests[0];
-      await db.insert(fieldReportsTable).values([
-        {
-          requestId: targetReq.id,
-          notes: "Pemeriksaan MCB dan instalasi grounding di lokasi selesai. Jalur stop kontak utama telah diperbaiki karena longgar dan kendor, MCB utama diganti ke tipe anti-trip 16A.",
-          media: ["foto_pemeriksaan_mcb.jpg", "skema_jalur_kabel.png"],
-        },
-      ]);
-    }
+  if (Number(tariffCount) === 0) {
+    await db.insert(nidiSloTariffsTable).values(
+      DEFAULT_NIDI_SLO_TARIFFS.map((t) => ({
+        ...t,
+        isActive: 1,
+      }))
+    );
+    console.log(`[Seed] Seeded ${DEFAULT_NIDI_SLO_TARIFFS.length} NIDI & SLO tariff rows.`);
   }
 }
+

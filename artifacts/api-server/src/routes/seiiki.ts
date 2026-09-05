@@ -7,9 +7,11 @@ import {
   dashboardUsersTable,
   equipmentRequestsTable,
   fieldReportsTable,
+  nidiSloTariffsTable,
   serviceRequestsTable,
   transactionsTable,
 } from "@workspace/db";
+import { DEFAULT_NIDI_SLO_TARIFFS } from "../lib/seed.js";
 import {
   CreateEquipmentRequestBody,
   CreateFieldReportBody,
@@ -68,9 +70,17 @@ async function mapRequest(request: typeof serviceRequestsTable.$inferSelect) {
     customerName: request.customerName,
     whatsapp: request.whatsapp,
     address: request.address,
+    province: request.province,
+    regency: request.regency,
+    district: request.district,
+    village: request.village,
     latitude: request.latitude,
     longitude: request.longitude,
     serviceType: request.serviceType,
+    powerVa: request.powerVa,
+    sloFee: request.sloFee,
+    nidiFee: request.nidiFee,
+    totalAmount: request.totalAmount,
     notes: request.notes,
     status: request.status,
     paymentStatus: request.paymentStatus,
@@ -87,10 +97,10 @@ function mapUser(user: typeof dashboardUsersTable.$inferSelect) {
   return {
     id: user.id,
     name: user.name,
-    phone: user.phone,
+    phone: user.phone || "",
     email: user.email || `${user.name.toLowerCase().replace(/\s+/g, "")}@seiiki.id`,
-    specialty: user.specialty || "Teknisi Listrik",
     role: user.role as "admin" | "worker",
+    specialty: user.specialty || "Teknisi Listrik",
     status: user.status as "active" | "inactive",
   };
 }
@@ -142,7 +152,24 @@ router.post("/requests", async (req, res): Promise<void> => {
     // fallback to 25000
   }
 
-  const { province, regency, district, village } = req.body || {};
+  const { province, regency, district, village, powerVa, sloFee, nidiFee, totalAmount } = req.body || {};
+
+  const isNidiSlo =
+    parsed.data.serviceType?.toLowerCase().includes("slo") ||
+    parsed.data.serviceType?.toLowerCase().includes("nidi");
+
+  const finalVisitFee = isNidiSlo ? 0 : currentVisitFee;
+  const finalPowerVa = powerVa ? Number(powerVa) : null;
+  const finalSloFee = sloFee ? Number(sloFee) : null;
+  const finalNidiFee = nidiFee ? Number(nidiFee) : null;
+  const calculatedTotal =
+    finalSloFee !== null && finalNidiFee !== null
+      ? finalSloFee + finalNidiFee
+      : totalAmount
+      ? Number(totalAmount)
+      : isNidiSlo
+      ? 85000
+      : null;
 
   const [request] = await db
     .insert(serviceRequestsTable)
@@ -152,8 +179,12 @@ router.post("/requests", async (req, res): Promise<void> => {
       regency: regency || null,
       district: district || null,
       village: village || null,
+      powerVa: finalPowerVa,
+      sloFee: finalSloFee,
+      nidiFee: finalNidiFee,
+      totalAmount: calculatedTotal,
       code: `SEI-${Date.now().toString().slice(-8)}`,
-      visitFee: currentVisitFee,
+      visitFee: finalVisitFee,
       status: "waiting_payment",
       paymentStatus: "unpaid",
     })
@@ -190,7 +221,9 @@ router.patch("/requests/:id", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Service request not found" });
     return;
   }
-  if (parsed.data.repairCost !== undefined && parsed.data.repairCost !== null) {
+
+  // Handle repair cost transaction sync
+  if (parsed.data.repairCost !== undefined) {
     const existingRepairTransaction = (
       await db
         .select({ id: transactionsTable.id })
@@ -203,10 +236,20 @@ router.patch("/requests/:id", async (req, res): Promise<void> => {
         )
         .limit(1)
     )[0];
-    if (existingRepairTransaction) {
+
+    if (parsed.data.repairCost === null || parsed.data.repairCost === 0) {
+      if (existingRepairTransaction) {
+        await db
+          .delete(transactionsTable)
+          .where(eq(transactionsTable.id, existingRepairTransaction.id));
+      }
+    } else if (existingRepairTransaction) {
       await db
         .update(transactionsTable)
-        .set({ amount: parsed.data.repairCost })
+        .set({
+          amount: parsed.data.repairCost,
+          status: request.status === "completed" ? "paid" : "pending",
+        })
         .where(eq(transactionsTable.id, existingRepairTransaction.id));
     } else {
       await db.insert(transactionsTable).values({
@@ -215,10 +258,36 @@ router.patch("/requests/:id", async (req, res): Promise<void> => {
         customerName: request.customerName,
         type: "repair_fee",
         amount: parsed.data.repairCost,
-        status: "pending",
+        status: request.status === "completed" ? "paid" : "pending",
       });
     }
   }
+
+  // Handle status sync for existing transactions
+  if (parsed.data.status) {
+    if (parsed.data.status === "completed") {
+      await db
+        .update(transactionsTable)
+        .set({ status: "paid" })
+        .where(
+          and(
+            eq(transactionsTable.requestId, request.id),
+            eq(transactionsTable.type, "repair_fee"),
+          ),
+        );
+    } else if (parsed.data.status === "cancelled") {
+      await db
+        .update(transactionsTable)
+        .set({ status: "cancelled" })
+        .where(
+          and(
+            eq(transactionsTable.requestId, request.id),
+            eq(transactionsTable.status, "pending"),
+          ),
+        );
+    }
+  }
+
   res.json(await mapRequest(request));
 });
 
@@ -236,6 +305,12 @@ router.delete("/requests/:id", async (req, res): Promise<void> => {
     res.status(404).json({ error: "Service request not found" });
     return;
   }
+
+  // Delete all related transactions to prevent orphan records
+  await db
+    .delete(transactionsTable)
+    .where(eq(transactionsTable.requestId, params.data.id));
+
   res.sendStatus(204);
 });
 
@@ -518,28 +593,57 @@ router.get("/users", async (_req, res): Promise<void> => {
 });
 
 router.post("/users", async (req, res): Promise<void> => {
-  const parsed = CreateUserBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+  const { name, username, email, password, phone, role, specialty } = req.body || {};
+  const finalName = String(username || name || "").trim();
+  if (!finalName) {
+    res.status(400).json({ error: "Username wajib diisi" });
     return;
   }
+  const cleanEmail = email ? String(email).trim().toLowerCase() : `${finalName.toLowerCase().replace(/[^a-z0-9]/g, "")}@seiiki.id`;
+  const cleanPassword = password ? String(password).trim() : "password123";
+
   const [user] = await db
     .insert(dashboardUsersTable)
-    .values({ ...parsed.data, status: "active" })
+    .values({
+      name: finalName,
+      email: cleanEmail,
+      password: cleanPassword,
+      phone: phone ? String(phone).trim() : "-",
+      role: role || "worker",
+      specialty: specialty || (role === "admin" ? "Administrator" : "Teknisi umum"),
+      status: "active",
+    })
     .returning();
   res.status(201).json(mapUser(user));
 });
 
 router.patch("/users/:id", async (req, res): Promise<void> => {
   const params = UpdateUserParams.safeParse(req.params);
-  const parsed = UpdateUserBody.safeParse(req.body);
-  if (!params.success || !parsed.success) {
-    res.status(400).json({ error: "Data pengguna tidak valid" });
+  if (!params.success) {
+    res.status(400).json({ error: "ID pengguna tidak valid" });
     return;
   }
+  const { name, username, email, password, phone, role, specialty, status } = req.body || {};
+  const updatePayload: Record<string, any> = {};
+  if (username !== undefined || name !== undefined) {
+    const finalName = String(username || name || "").trim();
+    if (finalName) updatePayload.name = finalName;
+  }
+  if (email !== undefined) {
+    const cleanEmail = String(email).trim().toLowerCase();
+    if (cleanEmail) updatePayload.email = cleanEmail;
+  }
+  if (password !== undefined && String(password).trim() !== "") {
+    updatePayload.password = String(password).trim();
+  }
+  if (phone !== undefined) updatePayload.phone = String(phone).trim();
+  if (role !== undefined) updatePayload.role = role;
+  if (specialty !== undefined) updatePayload.specialty = specialty;
+  if (status !== undefined) updatePayload.status = status;
+
   const [user] = await db
     .update(dashboardUsersTable)
-    .set(parsed.data)
+    .set(updatePayload)
     .where(eq(dashboardUsersTable.id, params.data.id))
     .returning();
   if (!user) {
@@ -745,6 +849,134 @@ router.delete("/booking-services/:id", async (req, res): Promise<void> => {
 
   if (!deleted) {
     res.status(404).json({ error: "Layanan tidak ditemukan" });
+    return;
+  }
+  res.sendStatus(204);
+});
+
+// NIDI & SLO Tariffs Endpoints
+router.get("/nidi-slo-tariffs", async (req, res): Promise<void> => {
+  const activeOnly = req.query.activeOnly === "true";
+  let tariffs = await db
+    .select()
+    .from(nidiSloTariffsTable)
+    .where(activeOnly ? eq(nidiSloTariffsTable.isActive, 1) : undefined)
+    .orderBy(asc(nidiSloTariffsTable.sortOrder), asc(nidiSloTariffsTable.powerVa));
+
+  if (tariffs.length === 0 && !activeOnly) {
+    // Auto-seed default 24 tariffs if empty
+    await db.insert(nidiSloTariffsTable).values(
+      DEFAULT_NIDI_SLO_TARIFFS.map((t) => ({
+        ...t,
+        isActive: 1,
+      }))
+    );
+    tariffs = await db
+      .select()
+      .from(nidiSloTariffsTable)
+      .orderBy(asc(nidiSloTariffsTable.sortOrder), asc(nidiSloTariffsTable.powerVa));
+  }
+
+  res.json(tariffs);
+});
+
+router.post("/nidi-slo-tariffs/reset-defaults", async (_req, res): Promise<void> => {
+  try {
+    // Delete existing and re-seed all 24 tariffs
+    await db.delete(nidiSloTariffsTable);
+    const seeded = await db
+      .insert(nidiSloTariffsTable)
+      .values(
+        DEFAULT_NIDI_SLO_TARIFFS.map((t) => ({
+          ...t,
+          isActive: 1,
+        }))
+      )
+      .returning();
+
+    seeded.sort((a, b) => a.sortOrder - b.sortOrder);
+    res.json(seeded);
+  } catch (err: any) {
+    console.error("[Tariff Reset] Error resetting tariffs:", err);
+    res.status(500).json({ error: err?.message || "Gagal mereset data tarif NIDI & SLO" });
+  }
+});
+
+router.post("/nidi-slo-tariffs", async (req, res): Promise<void> => {
+  const { sortOrder, powerVa, powerLabel, sloFee, nidiFee, totalFee, notes, isActive } = req.body;
+  if (!powerVa || !powerLabel) {
+    res.status(400).json({ error: "Daya (VA) dan label daya wajib diisi" });
+    return;
+  }
+  const slo = Number(sloFee || 0);
+  const nidi = Number(nidiFee || 0);
+  const total = totalFee !== undefined ? Number(totalFee) : slo + nidi;
+
+  const [created] = await db
+    .insert(nidiSloTariffsTable)
+    .values({
+      sortOrder: sortOrder !== undefined ? Number(sortOrder) : 0,
+      powerVa: Number(powerVa),
+      powerLabel: String(powerLabel).trim(),
+      sloFee: slo,
+      nidiFee: nidi,
+      totalFee: total,
+      notes: notes?.trim() || null,
+      isActive: isActive !== undefined ? Number(isActive) : 1,
+    })
+    .returning();
+  res.status(201).json(created);
+});
+
+router.put("/nidi-slo-tariffs/:id", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!id || Number.isNaN(id)) {
+    res.status(400).json({ error: "ID tarif tidak valid" });
+    return;
+  }
+  const { sortOrder, powerVa, powerLabel, sloFee, nidiFee, totalFee, notes, isActive } = req.body;
+  const updateData: any = {};
+  if (sortOrder !== undefined) updateData.sortOrder = Number(sortOrder);
+  if (powerVa !== undefined) updateData.powerVa = Number(powerVa);
+  if (powerLabel !== undefined) updateData.powerLabel = String(powerLabel).trim();
+  if (sloFee !== undefined) updateData.sloFee = Number(sloFee);
+  if (nidiFee !== undefined) updateData.nidiFee = Number(nidiFee);
+  if (totalFee !== undefined) {
+    updateData.totalFee = Number(totalFee);
+  } else if (sloFee !== undefined || nidiFee !== undefined) {
+    const slo = sloFee !== undefined ? Number(sloFee) : 0;
+    const nidi = nidiFee !== undefined ? Number(nidiFee) : 0;
+    updateData.totalFee = slo + nidi;
+  }
+  if (notes !== undefined) updateData.notes = notes?.trim() || null;
+  if (isActive !== undefined) updateData.isActive = Number(isActive);
+
+  const [updated] = await db
+    .update(nidiSloTariffsTable)
+    .set(updateData)
+    .where(eq(nidiSloTariffsTable.id, id))
+    .returning();
+
+  if (!updated) {
+    res.status(404).json({ error: "Tarif NIDI & SLO tidak ditemukan" });
+    return;
+  }
+  res.json(updated);
+});
+
+router.delete("/nidi-slo-tariffs/:id", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!id || Number.isNaN(id)) {
+    res.status(400).json({ error: "ID tarif tidak valid" });
+    return;
+  }
+  const [deleted] = await db
+    .delete(nidiSloTariffsTable)
+    .where(eq(nidiSloTariffsTable.id, id))
+    .returning();
+
+  if (!deleted) {
+    res.status(404).json({ error: "Tarif NIDI & SLO tidak ditemukan" });
     return;
   }
   res.sendStatus(204);

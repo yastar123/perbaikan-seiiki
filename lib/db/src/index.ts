@@ -101,10 +101,26 @@ const SCHEMA_DDL = `
     enable_notes INTEGER NOT NULL DEFAULT 1,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
+  CREATE TABLE IF NOT EXISTS nidi_slo_tariffs (
+    id SERIAL PRIMARY KEY,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    power_va INTEGER NOT NULL,
+    power_label TEXT NOT NULL,
+    slo_fee INTEGER NOT NULL,
+    nidi_fee INTEGER NOT NULL,
+    total_fee INTEGER NOT NULL,
+    notes TEXT,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
   ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS province TEXT;
   ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS regency TEXT;
   ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS district TEXT;
   ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS village TEXT;
+  ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS power_va INTEGER;
+  ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS slo_fee INTEGER;
+  ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS nidi_fee INTEGER;
+  ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS total_amount INTEGER;
   CREATE TABLE IF NOT EXISTS provinces (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,

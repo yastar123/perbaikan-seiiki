@@ -311,7 +311,8 @@ export const CreateFieldReportResponse = zod.object({
 export const ListUsersResponseItem = zod.object({
   "id": zod.int(),
   "name": zod.string(),
-  "phone": zod.string(),
+  "phone": zod.string().optional(),
+  "email": zod.string().optional(),
   "role": zod.enum(['admin', 'worker']),
   "status": zod.enum(['active', 'inactive'])
 })
@@ -322,16 +323,20 @@ export const ListUsersResponse = zod.array(ListUsersResponseItem)
  * @summary Create a dashboard user
  */
 export const CreateUserBody = zod.object({
-  "name": zod.string(),
-  "phone": zod.string(),
-  "role": zod.enum(['admin', 'worker']),
+  "name": zod.string().optional(),
+  "username": zod.string().optional(),
+  "email": zod.string().optional(),
+  "password": zod.string().optional(),
+  "phone": zod.string().optional(),
+  "role": zod.enum(['admin', 'worker']).optional(),
   "specialty": zod.string().optional()
 })
 
 export const CreateUserResponse = zod.object({
   "id": zod.int(),
   "name": zod.string(),
-  "phone": zod.string(),
+  "phone": zod.string().optional(),
+  "email": zod.string().optional(),
   "role": zod.enum(['admin', 'worker']),
   "status": zod.enum(['active', 'inactive'])
 })
@@ -346,6 +351,9 @@ export const UpdateUserParams = zod.object({
 
 export const UpdateUserBody = zod.object({
   "name": zod.string().optional(),
+  "username": zod.string().optional(),
+  "email": zod.string().optional(),
+  "password": zod.string().optional(),
   "phone": zod.string().optional(),
   "role": zod.enum(['admin', 'worker']).optional(),
   "status": zod.enum(['active', 'inactive']).optional()
@@ -354,7 +362,8 @@ export const UpdateUserBody = zod.object({
 export const UpdateUserResponse = zod.object({
   "id": zod.int(),
   "name": zod.string(),
-  "phone": zod.string(),
+  "phone": zod.string().optional(),
+  "email": zod.string().optional(),
   "role": zod.enum(['admin', 'worker']),
   "status": zod.enum(['active', 'inactive'])
 })

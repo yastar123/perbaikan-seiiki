@@ -132,8 +132,15 @@ router.post("/paywuz/create-transaction", async (req: Request, res: Response): P
       return;
     }
 
-    // Amount is the visit fee
-    const amount = request.visitFee || 25000;
+    // Determine payment amount and transaction type
+    const isNidiSlo =
+      request.serviceType?.toLowerCase().includes("slo") ||
+      request.serviceType?.toLowerCase().includes("nidi");
+    const amount =
+      isNidiSlo && (request.totalAmount || (request as any).totalFee)
+        ? Number(request.totalAmount || (request as any).totalFee)
+        : request.visitFee || 25000;
+    const txType = isNidiSlo ? "nidi_slo_fee" : "visit_fee";
 
     // Check if an existing pending Paywuz transaction exists for this request
     const [existingTx] = await db
@@ -142,7 +149,6 @@ router.post("/paywuz/create-transaction", async (req: Request, res: Response): P
       .where(
         and(
           eq(transactionsTable.requestId, request.id),
-          eq(transactionsTable.type, "visit_fee"),
           eq(transactionsTable.status, "pending")
         )
       )
@@ -199,7 +205,7 @@ router.post("/paywuz/create-transaction", async (req: Request, res: Response): P
         requestId: request.id,
         requestCode: request.code,
         customerName: request.customerName,
-        type: "visit_fee",
+        type: txType,
         amount,
         status: paywuzRes.status === "success" ? "paid" : "pending",
         orderId: paywuzRes.orderId,

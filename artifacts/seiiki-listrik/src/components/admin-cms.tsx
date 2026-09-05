@@ -569,7 +569,7 @@ export function AdminCms() {
                   type="text"
                   value={formData.flow.titleLine1 || ''}
                   onChange={(e) => updateSection('flow', { titleLine1: e.target.value })}
-                  placeholder="Rapi sejak"
+                  placeholder="JASA KETENAGALISTRIKAN"
                   className="w-full"
                 />
               </div>
@@ -579,7 +579,7 @@ export function AdminCms() {
                   type="text"
                   value={formData.flow.titleLine2Accent || ''}
                   onChange={(e) => updateSection('flow', { titleLine2Accent: e.target.value })}
-                  placeholder="pesan pertama."
+                  placeholder="LAMPUNG"
                   className="w-full"
                 />
               </div>
