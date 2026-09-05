@@ -463,6 +463,67 @@ router.get("/transactions", async (req, res): Promise<void> => {
   );
 });
 
+router.delete("/transactions/:id", async (req, res): Promise<void> => {
+  const id = Number(req.params.id);
+  if (!id || isNaN(id)) {
+    res.status(400).json({ error: "ID transaksi tidak valid" });
+    return;
+  }
+
+  // 1. Check if real record in transactionsTable
+  const existing = await db
+    .select()
+    .from(transactionsTable)
+    .where(eq(transactionsTable.id, id))
+    .limit(1);
+
+  if (existing.length > 0) {
+    const tx = existing[0];
+    await db.delete(transactionsTable).where(eq(transactionsTable.id, id));
+
+    // If associated with a service request, check if any other transactions remain
+    if (tx.requestId) {
+      const remainingTx = await db
+        .select()
+        .from(transactionsTable)
+        .where(eq(transactionsTable.requestId, tx.requestId));
+      if (remainingTx.length === 0) {
+        await db
+          .update(serviceRequestsTable)
+          .set({ paymentStatus: "unpaid" })
+          .where(eq(serviceRequestsTable.id, tx.requestId));
+      }
+    }
+
+    res.json({ success: true, message: "Transaksi berhasil dihapus" });
+    return;
+  }
+
+  // 2. Handle synthetic repair fee transactions (id >= 99000)
+  if (id >= 99000 && id < 150000) {
+    const reqId = id - 99000;
+    await db
+      .update(serviceRequestsTable)
+      .set({ repairCost: null })
+      .where(eq(serviceRequestsTable.id, reqId));
+    res.json({ success: true, message: "Biaya perbaikan berhasil dihapus dari pesanan" });
+    return;
+  }
+
+  // 3. Handle synthetic NIDI & SLO transactions (id >= 88000)
+  if (id >= 88000 && id < 99000) {
+    const reqId = id - 88000;
+    await db
+      .update(serviceRequestsTable)
+      .set({ totalAmount: null, paymentStatus: "unpaid" })
+      .where(eq(serviceRequestsTable.id, reqId));
+    res.json({ success: true, message: "Transaksi NIDI & SLO berhasil dihapus" });
+    return;
+  }
+
+  res.status(404).json({ error: "Transaksi tidak ditemukan" });
+});
+
 router.get("/equipment-requests", async (_req, res): Promise<void> => {
   const requests = await db
     .select()

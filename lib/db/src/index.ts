@@ -4,7 +4,7 @@ import { PGlite } from "@electric-sql/pglite";
 import pg from "pg";
 import path from "path";
 import fs from "fs";
-import * as schema from "./schema";
+import * as schema from "./schema/index.js";
 
 let dbInstance: any = null;
 let poolInstance: pg.Pool | null = null;
@@ -167,6 +167,8 @@ const SCHEMA_DDL = `
   ALTER TABLE transactions ADD COLUMN IF NOT EXISTS paywuz_status TEXT;
 `;
 
+const dataDir = path.resolve(process.cwd(), ".data/pglite");
+
 export async function initDb(): Promise<void> {
   if (!process.env.DATABASE_URL) {
     for (const envFile of [".env", ".env.example"]) {
@@ -182,32 +184,63 @@ export async function initDb(): Promise<void> {
     }
   }
 
-  if (process.env.DATABASE_URL) {
+  const rawUrl = process.env.DATABASE_URL?.trim();
+  const isLocalHostDb = Boolean(
+    rawUrl && (rawUrl.includes("@localhost") || rawUrl.includes("@127.0.0.1") || rawUrl.includes("://localhost") || rawUrl.includes("://127.0.0.1"))
+  );
+
+  if (rawUrl && !isLocalHostDb) {
+    let testPool: pg.Pool | null = null;
     try {
-      poolInstance = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-      await poolInstance.query("SELECT 1");
-      await poolInstance.query(SCHEMA_DDL);
+      testPool = new pg.Pool({
+        connectionString: rawUrl,
+        connectionTimeoutMillis: 3000,
+        ssl: rawUrl.includes("sslmode=disable") ? false : { rejectUnauthorized: false },
+      });
+      testPool.on("error", () => {
+        // Guard against uncaught background errors
+      });
+
+      const client = await testPool.connect();
+      await client.query("SELECT 1");
+      client.release();
+      await testPool.query(SCHEMA_DDL);
+
+      poolInstance = testPool;
       dbInstance = drizzlePg(poolInstance, { schema });
-      console.log("[DB] Connected to PostgreSQL via DATABASE_URL");
+      console.log("[DB] Connected successfully to remote PostgreSQL via DATABASE_URL");
       return;
-    } catch (err) {
-      console.warn("[DB] Failed to connect to DATABASE_URL, falling back to in-memory PGlite:", err);
+    } catch (err: any) {
+      if (testPool) {
+        try {
+          await testPool.end();
+        } catch {}
+      }
+      poolInstance = null;
+      console.log(`[DB] Remote PostgreSQL is not reachable (${err?.code || err?.message || 'offline'}). Using local persistent PGlite storage.`);
     }
+  } else if (isLocalHostDb) {
+    console.log("[DB] Notice: DATABASE_URL is configured for local machine (localhost). In cloud environment, using persistent embedded PostgreSQL (PGlite).");
   }
 
   if (!pgliteInstance) {
-    console.log("[DB] Initializing in-memory PGlite database...");
-    pgliteInstance = new PGlite();
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    pgliteInstance = new PGlite(dataDir);
     await pgliteInstance.exec(SCHEMA_DDL);
     dbInstance = drizzlePglite(pgliteInstance, { schema });
-    console.log("[DB] In-memory database initialized successfully.");
+    console.log("[DB] Persistent PGlite database ready at", dataDir);
   }
 }
 
 function ensureDbInstance(): any {
   if (!dbInstance) {
     if (!pgliteInstance) {
-      pgliteInstance = new PGlite();
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+      pgliteInstance = new PGlite(dataDir);
       pgliteInstance.exec(SCHEMA_DDL).catch((err) => {
         console.error("[DB] Error executing initial DDL:", err);
       });
@@ -226,5 +259,5 @@ export const db: any = new Proxy({}, {
 });
 
 export const pool = poolInstance;
-export * from "./schema";
+export * from "./schema/index.js";
 

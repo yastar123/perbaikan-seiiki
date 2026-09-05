@@ -4,9 +4,9 @@ import { Link, Route, Router as WouterRouter, Switch, useLocation } from 'wouter
 import * as XLSX from 'xlsx';
 import {
   Activity, AlertTriangle, ArrowRight, BadgeCheck, Banknote, BarChart3, Bell, Boxes, BriefcaseBusiness,
-  CalendarDays, Check, CheckCircle2, ChevronDown, ClipboardCheck, Clock3, Download, ExternalLink, Eye, FileEdit, FileText,
-  Globe, Headphones, HelpCircle, History, Info, Layers, LayoutDashboard, LocateFixed, LogIn, LogOut, MapPin, Menu,
-  MessageCircle, PackageCheck, Paperclip, Pencil, Plus, Radio, ReceiptText, RefreshCw, RotateCcw,
+  CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, Clock3, Download, ExternalLink, Eye, FileEdit, FileText,
+  Globe, Headphones, HelpCircle, History, Info, Layers, LayoutDashboard, LocateFixed, LogIn, LogOut, MapPin, Maximize2, Menu,
+  MessageCircle, PackageCheck, Paperclip, Pause, Pencil, Play, Plus, Radio, ReceiptText, RefreshCw, RotateCcw,
   Save, Search, Send, Settings, Settings2, ShieldCheck, Sliders, SlidersHorizontal, Smartphone, Sparkles,
   Tag, ToggleLeft, ToggleRight, Trash2, UserRound, UsersRound, Wrench, X, Zap
 } from 'lucide-react';
@@ -28,6 +28,8 @@ import { AdminLocations } from '@/components/admin-locations';
 import { AdminCms, useLandingCms, renderCmsIcon } from '@/components/admin-cms';
 import { AdminSettings } from '@/components/admin-settings';
 import { PaywuzPayment } from '@/components/paywuz-payment';
+import { ReportMediaGrid, WorkerMediaUploader } from '@/components/report-media-viewer';
+import { NidiSloPricingModal, DEFAULT_OFFICIAL_NIDI_SLO_TARIFFS } from '@/components/nidi-slo-pricing-modal';
 
 const queryClient = new QueryClient();
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -331,6 +333,28 @@ function useResetNidiSloTariffs() {
   });
 }
 
+function useDeleteTransaction() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`${basePath}/api/transactions/${id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Gagal menghapus transaksi');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: getListTransactionsQueryKey() });
+      client.invalidateQueries({ queryKey: ['transactions'] });
+      client.invalidateQueries({ queryKey: getListServiceRequestsQueryKey() });
+      client.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
+    },
+  });
+}
+
 export interface FieldReportItem {
   id: number;
   requestId: number;
@@ -627,6 +651,10 @@ function AppShell({ children, role = 'admin' }: { children: React.ReactNode; rol
   const session = getAuthSession();
   const displayName = session?.name || (role === 'admin' ? 'Admin SEIIKI' : 'Teknisi lapangan');
   const initials = displayName.split(/\s+/).map((value) => value[0]).join('').slice(0, 2).toUpperCase();
+
+  const requestsQuery = useListServiceRequests();
+  const requestsCount = requestsQuery.data ? requestsQuery.data.length : 0;
+
   useEffect(() => {
     if (!menu) return;
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -653,7 +681,7 @@ function AppShell({ children, role = 'admin' }: { children: React.ReactNode; rol
         </button>
       </div>
       <div className="mt-8 px-3 text-[10px] font-extrabold uppercase tracking-[.18em] text-sidebar-foreground/40">{role === 'admin' ? 'Ruang kendali' : 'Ruang pekerja'}</div>
-      <nav className="mt-3 space-y-1">{nav.map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={() => setMenu(false)} className={`side-link ${location === href ? 'side-link-active' : ''}`} data-testid={`link-${label.toLowerCase().replaceAll(' ', '-')}`}><Icon size={17} /><span>{label}</span>{href === '/admin/requests' && <span className="ml-auto grid size-5 place-items-center rounded-full bg-primary text-[10px] font-extrabold text-primary-foreground">4</span>}</Link>)}</nav>
+      <nav className="mt-3 space-y-1">{nav.map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={() => setMenu(false)} className={`side-link ${location === href ? 'side-link-active' : ''}`} data-testid={`link-${label.toLowerCase().replaceAll(' ', '-')}`}><Icon size={17} /><span>{label}</span>{href === '/admin/requests' && requestsCount > 0 && <span className="ml-auto grid min-w-5 h-5 px-1.5 place-items-center rounded-full bg-primary text-[10px] font-extrabold text-primary-foreground">{requestsCount}</span>}</Link>)}</nav>
       <div className="sidebar-bottom">
         <button type="button" onClick={logout} className="side-link w-full text-sidebar-foreground/55" data-testid="button-logout"><LogOut size={17} /><span>Keluar</span></button>
       </div>
@@ -854,6 +882,261 @@ function RequestTable({ requests, onAssign, onManage, onDelete, compact = false 
   );
 }
 
+const CUSTOMER_GALLERY_IMAGES = [
+  {
+    id: 1,
+    src: `${basePath}/galeri-1.jpeg`,
+    badge: '01',
+    category: 'Panel & Distribusi',
+    title: 'Pemasangan & Pengkabelan Panel Listrik',
+    desc: 'Pengkabelan rapi dan tertata sesuai standar teknis keselamatan ketenagalistrikan (PUIL).',
+  },
+  {
+    id: 2,
+    src: `${basePath}/galeri-2.jpeg`,
+    badge: '02',
+    category: 'Proteksi Sirkit',
+    title: 'Penyetelan & Penggantian MCB Utama',
+    desc: 'Pemasangan sakelar pemutus otomatis berkualitas tinggi guna mencegah beban lebih dan lonjakan arus.',
+  },
+  {
+    id: 3,
+    src: `${basePath}/galeri-3.jpeg`,
+    badge: '03',
+    category: 'Titik Beban',
+    title: 'Pemeriksaan Titik Daya & Stop Kontak',
+    desc: 'Pengecekan kontinuitas, proteksi arus bocor, dan pembumian instalasi rumah tinggal.',
+  },
+  {
+    id: 4,
+    src: `${basePath}/galeri-4.jpeg`,
+    badge: '04',
+    category: 'Pengukuran & Uji',
+    title: 'Inspeksi Kelaikan & Pengukuran Beban',
+    desc: 'Pengujian tegangan voltase serta evaluasi pembagian beban daya MCB yang seimbang.',
+  },
+  {
+    id: 5,
+    src: `${basePath}/galeri-5.jpeg`,
+    badge: '05',
+    category: 'Pasang Baru',
+    title: 'Penarikan Jalur Kabel Instalasi Baru',
+    desc: 'Pemasangan pipa pelindung conduit dan kabel tembaga murni untuk instalasi gedung & hunian.',
+  },
+  {
+    id: 6,
+    src: `${basePath}/galeri-6.jpeg`,
+    badge: '06',
+    category: 'Perapihan Jalur',
+    title: 'Perapihan Jalur Distribusi Listrik',
+    desc: 'Penyambungan kabel tahan panas dan penataan ulang jalur kabel untuk mencegah korsleting.',
+  },
+  {
+    id: 7,
+    src: `${basePath}/galeri-7.jpeg`,
+    badge: '07',
+    category: 'Keselamatan',
+    title: 'Pengujian Sistem Pembumian (Grounding)',
+    desc: 'Pengecekan nilai resistansi elektroda pembumian demi proteksi terhadap petir dan lonjakan.',
+  },
+  {
+    id: 8,
+    src: `${basePath}/galeri-8.jpeg`,
+    badge: '08',
+    category: 'Pemeliharaan',
+    title: 'Rekondisi Terminal & Sambungan Beban',
+    desc: 'Pengencangan klem konektor yang kendor guna menghilangkan titik panas percikan api.',
+  },
+  {
+    id: 9,
+    src: `${basePath}/galeri-9.jpeg`,
+    badge: '09',
+    category: 'Sertifikasi NIDI & SLO',
+    title: 'Pemeriksaan Standar Teknis NIDI & SLO',
+    desc: 'Verifikasi kesesuaian gambar instalasi dan spesifikasi material sebelum sertifikasi resmi terbit.',
+  },
+  {
+    id: 10,
+    src: `${basePath}/galeri-10.jpeg`,
+    badge: '10',
+    category: 'Kesiapan Operasi',
+    title: 'Verifikasi Akhir & Kesiapan Operasi',
+    desc: 'Pemeriksaan menyeluruh kesiapan laik operasi instalasi bersama pelanggan sebelum serah terima.',
+  },
+];
+
+interface ActivityGalleryCarouselProps {
+  onSelectPhoto: (index: number) => void;
+}
+
+function ActivityGalleryCarousel({ onSelectPhoto }: ActivityGalleryCarouselProps) {
+  const [isPaused, setIsPaused] = useState(false);
+
+  const handleScroll = (direction: 'left' | 'right') => {
+    const el = document.getElementById('gallery-scroll-viewport');
+    if (el) {
+      const scrollAmount = 340;
+      el.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth',
+      });
+    }
+  };
+
+  // Double items for seamless infinite marquee illusion
+  const loopedItems = [...CUSTOMER_GALLERY_IMAGES, ...CUSTOMER_GALLERY_IMAGES];
+
+  return (
+    <section
+      id="galeri"
+      className="relative my-8 overflow-hidden rounded-3xl border border-border/80 bg-card/60 p-5 sm:p-7 shadow-xs backdrop-blur-xs"
+      data-testid="section-activity-gallery"
+    >
+      {/* Background soft ambient glow */}
+      <div className="pointer-events-none absolute -top-24 left-1/2 -translate-x-1/2 h-48 w-3/4 rounded-full bg-primary/10 blur-3xl" />
+
+      {/* Header bar */}
+      <div className="relative z-10 mb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div>
+          <div className="eyebrow flex items-center gap-2">
+            <span className="status-dot bg-accent" />
+            <span>Dokumentasi Kegiatan Nyata</span>
+            <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold text-primary">
+              10 Foto Lapangan
+            </span>
+          </div>
+          <h2 className="mt-1 text-lg sm:text-2xl font-bold tracking-tight text-foreground">
+            Galeri Kegiatan & Pekerjaan Teknisi
+          </h2>
+          <p className="mt-1 max-w-xl text-xs sm:text-sm text-muted-foreground leading-relaxed">
+            Dokumentasi pekerjaan langsung dari lokasi kunjungan pelanggan — dari instalasi panel, perbaikan jalur, hingga uji kelaikan operasi.
+          </p>
+        </div>
+
+        {/* Action Controls: Pause/Play & Prev/Next */}
+        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+          <button
+            type="button"
+            onClick={() => setIsPaused((prev) => !prev)}
+            className="btn btn-outline !py-1.5 !px-3 text-xs flex items-center gap-1.5"
+            title={isPaused ? 'Jalankan rotasi otomatis' : 'Jeda rotasi otomatis'}
+            data-testid="button-gallery-toggle-pause"
+          >
+            {isPaused ? <Play size={13} className="text-emerald-600 dark:text-emerald-400" /> : <Pause size={13} />}
+            <span className="hidden xs:inline">{isPaused ? 'Lanjut Putar' : 'Jeda'}</span>
+          </button>
+
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => handleScroll('left')}
+              className="icon-button !size-8"
+              aria-label="Geser ke kiri"
+              data-testid="button-gallery-scroll-left"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleScroll('right')}
+              className="icon-button !size-8"
+              aria-label="Geser ke kanan"
+              data-testid="button-gallery-scroll-right"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Infinity Carousel Container */}
+      <div className="relative -mx-5 sm:-mx-7 px-5 sm:px-7">
+        {/* Soft edge blur masks */}
+        <div className="pointer-events-none absolute left-0 top-0 bottom-0 z-20 w-8 sm:w-16 bg-gradient-to-r from-background via-background/60 to-transparent" />
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 z-20 w-8 sm:w-16 bg-gradient-to-l from-background via-background/60 to-transparent" />
+
+        {/* Horizontal scrollable track with infinite marquee */}
+        <div
+          id="gallery-scroll-viewport"
+          className="overflow-x-auto no-scrollbar py-2"
+          onMouseEnter={() => setIsPaused(true)}
+          onMouseLeave={() => setIsPaused(false)}
+        >
+          <div className={`gallery-marquee-track ${isPaused ? 'is-paused' : ''}`}>
+            {loopedItems.map((item, idx) => {
+              const originalIndex = idx % CUSTOMER_GALLERY_IMAGES.length;
+              return (
+                <div
+                  key={`${item.id}-${idx}`}
+                  onClick={() => onSelectPhoto(originalIndex)}
+                  className="gallery-card-hover group relative w-[250px] sm:w-[290px] shrink-0 cursor-pointer overflow-hidden rounded-2xl border border-border bg-card shadow-xs mr-4 flex flex-col select-none"
+                  data-testid={`gallery-carousel-item-${originalIndex}`}
+                >
+                  {/* Photo container */}
+                  <div className="relative aspect-[3/4] w-full overflow-hidden bg-muted">
+                    <img
+                      src={item.src}
+                      alt={item.title}
+                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      loading="lazy"
+                    />
+
+                    {/* Top badging */}
+                    <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none z-10">
+                      <span className="rounded-md bg-black/65 px-2 py-0.5 font-mono text-[10px] font-bold text-white backdrop-blur-xs shadow-xs">
+                        #{item.badge}
+                      </span>
+                      <span className="rounded-md bg-primary/90 px-2 py-0.5 text-[10px] font-bold text-primary-foreground backdrop-blur-xs shadow-xs">
+                        {item.category}
+                      </span>
+                    </div>
+
+                    {/* Bottom overlay with hover preview hint */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex flex-col justify-end p-3 z-10">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-white/20 backdrop-blur-sm rounded-lg px-2.5 py-1.5 w-fit">
+                        <Eye size={13} /> Perbesar Foto
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Caption & Title */}
+                  <div className="p-3.5 flex-1 flex flex-col justify-between bg-card">
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-bold text-foreground line-clamp-2 leading-snug group-hover:text-primary transition-colors">
+                        {item.title}
+                      </h4>
+                      <p className="mt-1 text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                        {item.desc}
+                      </p>
+                    </div>
+                    <div className="mt-2.5 pt-2 border-t border-border/50 flex items-center justify-between text-[10px] text-muted-foreground">
+                      <span>Dokumentasi Lapangan</span>
+                      <span className="font-semibold text-primary group-hover:underline flex items-center gap-0.5">
+                        Lihat <ChevronRight size={11} />
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center justify-between text-[11px] text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          Arahkan kursor atau sentuh foto untuk menghentikan putaran otomatis
+        </span>
+        <span className="hidden sm:inline font-mono text-[10px]">
+          Tekan tombol panah untuk menggeser
+        </span>
+      </div>
+    </section>
+  );
+}
+
+
 function CustomerHome() {
   const create = useCreateServiceRequest();
   const pay = useCreateVisitPayment();
@@ -878,32 +1161,38 @@ function CustomerHome() {
     notes: '',
   });
   const [selectedTariffId, setSelectedTariffId] = useState<number | null>(null);
+  const [showNidiPricingModal, setShowNidiPricingModal] = useState(false);
   const [tariffSearch, setTariffSearch] = useState('');
+  const [activeGalleryIndex, setActiveGalleryIndex] = useState<number | null>(null);
 
   const isNidiSlo = useMemo(() => {
     const s = (form.serviceType || '').toLowerCase();
     return s.includes('nidi') || s.includes('slo');
   }, [form.serviceType]);
 
+  const activeTariffList = useMemo(() => {
+    return tariffs.length > 0 ? tariffs : DEFAULT_OFFICIAL_NIDI_SLO_TARIFFS;
+  }, [tariffs]);
+
   const selectedTariff = useMemo(() => {
-    if (!tariffs.length) return null;
+    if (!activeTariffList.length) return null;
     if (selectedTariffId) {
-      const found = tariffs.find((t) => t.id === selectedTariffId);
+      const found = activeTariffList.find((t) => t.id === selectedTariffId);
       if (found) return found;
     }
-    return tariffs[0];
-  }, [tariffs, selectedTariffId]);
+    return activeTariffList[0];
+  }, [activeTariffList, selectedTariffId]);
 
   const filteredTariffs = useMemo(() => {
-    if (!tariffSearch.trim()) return tariffs;
+    if (!tariffSearch.trim()) return activeTariffList;
     const q = tariffSearch.toLowerCase().replace(/\./g, '');
-    return tariffs.filter((t) => {
+    return activeTariffList.filter((t) => {
       const vaStr = String(t.powerVa);
       const labelStr = t.powerLabel.toLowerCase();
       const notesStr = (t.notes || '').toLowerCase();
       return vaStr.includes(q) || labelStr.includes(q) || notesStr.includes(q);
     });
-  }, [tariffs, tariffSearch]);
+  }, [activeTariffList, tariffSearch]);
 
   const [hierarchicalLocation, setHierarchicalLocation] = useState<HierarchicalLocationValue>({
     provinceId: null,
@@ -1014,6 +1303,7 @@ function CustomerHome() {
           ) : (
             <>
               <a href="#alur" data-testid="link-customer-flow">Cara kerja</a>
+              <a href="#galeri" data-testid="link-customer-gallery">Galeri kerja</a>
               <a href="#aman" data-testid="link-customer-safety">Jaminan kami</a>
             </>
           )}
@@ -1177,7 +1467,14 @@ function CustomerHome() {
               >
                 <select
                   value={form.serviceType}
-                  onChange={(e) => set('serviceType', e.target.value)}
+                  onChange={(e) => {
+                    const nextType = e.target.value;
+                    set('serviceType', nextType);
+                    const isNidi = nextType.toLowerCase().includes('nidi') || nextType.toLowerCase().includes('slo');
+                    if (isNidi) {
+                      setShowNidiPricingModal(true);
+                    }
+                  }}
                   data-testid="select-service-type"
                 >
                   {activeServices.length > 0 ? (
@@ -1196,104 +1493,61 @@ function CustomerHome() {
                 </select>
               </Field>
 
-              {/* NIDI & SLO Pricing Matrix Selection */}
+              {/* NIDI & SLO Pricing Selection Card & Modal Trigger */}
               {isNidiSlo && (
-                <div className="space-y-3 rounded-2xl border-2 border-primary/40 bg-card p-4 shadow-sm">
-                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-3 rounded-2xl border-2 border-primary/40 bg-card p-4 shadow-sm" data-testid="container-nidi-slo-selection">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="inline-flex size-6 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xs font-black">⚡</span>
-                        <h4 className="text-sm font-bold text-foreground">Rekap Tarif SLO & Supervisi NIDI (TR)</h4>
+                        <span className="inline-flex size-6 items-center justify-center rounded-lg bg-[#1e4e79] text-white text-xs font-black">⚡</span>
+                        <h4 className="text-sm font-bold text-foreground">Tarif Biaya SLO & Supervisi NIDI (TR)</h4>
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Tegangan Rendah — Pilih golongan daya listrik Anda di bawah ini:
+                        Tegangan Rendah — Biaya resmi bersertifikat berdasarkan kapasitas daya listrik Anda.
                       </p>
                     </div>
 
-                    <div className="search-field !mt-0 max-w-[200px]">
-                      <Search size={13} />
-                      <input
-                        type="text"
-                        value={tariffSearch}
-                        onChange={(e) => setTariffSearch(e.target.value)}
-                        placeholder="Cari daya (VA)..."
-                        className="!text-xs !py-1"
-                        data-testid="input-search-tariff"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Pricing Table */}
-                  <div className="max-h-60 overflow-y-auto rounded-xl border border-border/80 bg-background/90 text-xs">
-                    <table className="w-full text-left border-collapse">
-                      <thead className="sticky top-0 bg-muted/90 backdrop-blur-xs text-[11px] font-bold text-muted-foreground border-b border-border">
-                        <tr>
-                          <th className="py-2 px-2.5 w-10 text-center">No.</th>
-                          <th className="py-2 px-2.5">Daya (VA)</th>
-                          <th className="py-2 px-2.5">Biaya SLO</th>
-                          <th className="py-2 px-2.5">Supervisi NIDI</th>
-                          <th className="py-2 px-2.5">Total Biaya</th>
-                          <th className="py-2 px-2.5 text-center">Pilih</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredTariffs.map((t, idx) => {
-                          const isSelected = selectedTariff?.id === t.id;
-                          return (
-                            <tr
-                              key={t.id}
-                              onClick={() => setSelectedTariffId(t.id)}
-                              className={`cursor-pointer border-b border-border/40 transition-colors ${
-                                isSelected
-                                  ? 'bg-primary/15 font-bold text-foreground hover:bg-primary/20'
-                                  : 'hover:bg-muted/50 text-foreground/80'
-                              }`}
-                              data-testid={`row-tariff-${t.id}`}
-                            >
-                              <td className="py-2 px-2.5 text-center font-mono text-[11px] text-muted-foreground">{t.sortOrder || idx + 1}</td>
-                              <td className="py-2 px-2.5">
-                                <span className="font-bold text-foreground">{t.powerLabel}</span>
-                              </td>
-                              <td className="py-2 px-2.5 font-mono text-[11px]">{rupiah(t.sloFee)}</td>
-                              <td className="py-2 px-2.5 font-mono text-[11px]">{rupiah(t.nidiFee)}</td>
-                              <td className="py-2 px-2.5 font-mono font-bold text-primary">{rupiah(t.totalFee)}</td>
-                              <td className="py-2 px-2.5 text-center">
-                                <input
-                                  type="radio"
-                                  name="nidiTariff"
-                                  checked={isSelected}
-                                  onChange={() => setSelectedTariffId(t.id)}
-                                  className="accent-primary cursor-pointer"
-                                />
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                    <button
+                      type="button"
+                      onClick={() => setShowNidiPricingModal(true)}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#1e4e79] hover:bg-[#14395b] text-white px-3.5 py-2 text-xs font-bold transition-all shadow-sm shrink-0"
+                      data-testid="button-open-nidi-pricing-modal"
+                    >
+                      <Eye size={14} />
+                      <span>Buka Tabel Daftar Harga</span>
+                    </button>
                   </div>
 
                   {/* Selected Breakdown Card */}
                   {selectedTariff && (
-                    <div className="rounded-xl border border-primary/30 bg-primary/5 p-3.5 space-y-2">
+                    <div className="rounded-xl border border-primary/30 bg-primary/5 p-3.5 space-y-2.5">
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
                           <CheckCircle2 size={15} className="text-emerald-500" />
-                          Paket Dipilih: <strong>{selectedTariff.powerLabel} ({selectedTariff.powerVa.toLocaleString('id-ID')} VA)</strong>
+                          Paket Terpilih: <strong>{selectedTariff.powerLabel} ({selectedTariff.powerVa.toLocaleString('id-ID')} VA)</strong>
                         </span>
-                        <span className="text-xs font-mono font-black text-primary">
+                        <span className="text-sm font-mono font-black text-[#b82e2e] dark:text-rose-400">
                           {rupiah(selectedTariff.totalFee)}
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground border-t border-primary/15 pt-2">
-                        <div>Biaya SLO: <strong className="font-mono text-foreground">{rupiah(selectedTariff.sloFee)}</strong></div>
-                        <div>Supervisi NIDI: <strong className="font-mono text-foreground">{rupiah(selectedTariff.nidiFee)}</strong></div>
+                      <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground border-t border-primary/15 pt-2 font-mono">
+                        <div>Biaya SLO: <strong className="text-foreground">{rupiah(selectedTariff.sloFee)}</strong></div>
+                        <div>Supervisi NIDI: <strong className="text-foreground">{rupiah(selectedTariff.nidiFee)}</strong></div>
                       </div>
 
-                      <p className="text-[11px] text-muted-foreground italic">
-                        * Pembayaran layanan NIDI & SLO langsung lunas penuh sesuai tarif paket daya di atas via Paywuz (tidak ada biaya kunjungan terpisah).
-                      </p>
+                      <div className="flex items-center justify-between pt-1 text-[11px]">
+                        <span className="text-muted-foreground italic">
+                          * Pembayaran NIDI & SLO dibayar penuh sesuai paket daya via Paywuz.
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setShowNidiPricingModal(true)}
+                          className="font-bold text-[#1e4e79] dark:text-blue-400 hover:underline shrink-0 ml-2"
+                        >
+                          Ubah Daya &raquo;
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1475,6 +1729,9 @@ function CustomerHome() {
         </div>
       </section>
 
+      {/* Galeri Kegiatan Infinity Carousel: Tepat di bawah section "Masalah listrik, kami urus." */}
+      <ActivityGalleryCarousel onSelectPhoto={(idx) => setActiveGalleryIndex(idx)} />
+
       {cms?.assurance?.enabled !== false && (
         <section id="aman" className="customer-assurance">
           <div>
@@ -1546,6 +1803,95 @@ function CustomerHome() {
           {cms?.footer?.tagline || 'clear work · safe homes'}
         </span>
       </footer>
+
+      {showNidiPricingModal && (
+        <NidiSloPricingModal
+          open={showNidiPricingModal}
+          onClose={() => setShowNidiPricingModal(false)}
+          tariffs={activeTariffList}
+          selectedTariffId={selectedTariff?.id ?? activeTariffList[0]?.id}
+          onSelectTariff={(t) => {
+            setSelectedTariffId(t.id);
+            setShowNidiPricingModal(false);
+          }}
+        />
+      )}
+
+      {activeGalleryIndex !== null && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 sm:p-5 backdrop-blur-xs animate-in fade-in duration-150"
+          onClick={() => setActiveGalleryIndex(null)}
+          data-testid="modal-gallery-lightbox"
+        >
+          <div
+            className="relative max-h-[92vh] max-w-3xl w-full rounded-2xl bg-card border border-border overflow-hidden shadow-2xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-border px-4 py-3 bg-muted/30">
+              <div className="min-w-0 pr-2">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-primary font-bold">
+                  Dokumentasi Lapangan {activeGalleryIndex + 1} / {CUSTOMER_GALLERY_IMAGES.length}
+                </div>
+                <h3 className="text-xs sm:text-sm font-bold text-foreground truncate mt-0.5">
+                  {CUSTOMER_GALLERY_IMAGES[activeGalleryIndex].title}
+                </h3>
+              </div>
+              <button
+                type="button"
+                className="icon-button !size-8 shrink-0"
+                onClick={() => setActiveGalleryIndex(null)}
+                aria-label="Tutup"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="relative flex-1 bg-black/95 flex items-center justify-center min-h-[280px] max-h-[65vh] overflow-hidden p-2 select-none">
+              <img
+                src={CUSTOMER_GALLERY_IMAGES[activeGalleryIndex].src}
+                alt={CUSTOMER_GALLERY_IMAGES[activeGalleryIndex].title}
+                className="max-h-[62vh] max-w-full object-contain rounded-lg"
+              />
+
+              {activeGalleryIndex > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setActiveGalleryIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : prev))}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/60 hover:bg-black/80 text-white size-9 flex items-center justify-center text-sm shadow-md transition-all"
+                  aria-label="Foto sebelumnya"
+                >
+                  ◀
+                </button>
+              )}
+              {activeGalleryIndex < CUSTOMER_GALLERY_IMAGES.length - 1 && (
+                <button
+                  type="button"
+                  onClick={() => setActiveGalleryIndex((prev) => (prev !== null && prev < CUSTOMER_GALLERY_IMAGES.length - 1 ? prev + 1 : prev))}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/60 hover:bg-black/80 text-white size-9 flex items-center justify-center text-sm shadow-md transition-all"
+                  aria-label="Foto berikutnya"
+                >
+                  ▶
+                </button>
+              )}
+            </div>
+
+            <div className="border-t border-border p-3 sm:p-4 bg-card flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                {CUSTOMER_GALLERY_IMAGES[activeGalleryIndex].desc}
+              </p>
+              <div className="flex items-center justify-end gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setActiveGalleryIndex(null)}
+                  className="btn btn-outline !py-1.5 !px-3 text-xs"
+                >
+                  Tutup
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1947,6 +2293,22 @@ function AdminTransactions() {
   const [search, setSearch] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [deletingTransaction, setDeletingTransaction] = useState<any | null>(null);
+  const [deleteSuccessMsg, setDeleteSuccessMsg] = useState<string | null>(null);
+
+  const deleteTransaction = useDeleteTransaction();
+
+  const handleConfirmDeleteTransaction = async () => {
+    if (!deletingTransaction) return;
+    try {
+      await deleteTransaction.mutateAsync(deletingTransaction.id);
+      setDeleteSuccessMsg(`Transaksi ${deletingTransaction.requestCode} (${deletingTransaction.customerName}) berhasil dihapus.`);
+      setDeletingTransaction(null);
+      setTimeout(() => setDeleteSuccessMsg(null), 4000);
+    } catch (err: any) {
+      alert(err.message || 'Gagal menghapus transaksi');
+    }
+  };
 
   const query = useListTransactions({
     period,
@@ -2372,6 +2734,16 @@ function AdminTransactions() {
           </div>
         </div>
 
+        {deleteSuccessMsg && (
+          <div className="mb-4 flex items-center justify-between rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-800 dark:text-emerald-300">
+            <span className="flex items-center gap-2">
+              <CheckCircle2 size={16} />
+              {deleteSuccessMsg}
+            </span>
+            <button onClick={() => setDeleteSuccessMsg(null)} className="font-bold text-xs">✕</button>
+          </div>
+        )}
+
         {query.isLoading ? (
           <LoadingRows />
         ) : !filteredRows.length ? (
@@ -2387,6 +2759,7 @@ function AdminTransactions() {
                   <th>Metode / Gateway</th>
                   <th>Nominal Biaya (Rp)</th>
                   <th>Status Pembayaran</th>
+                  <th className="text-right">Aksi</th>
                 </tr>
               </thead>
               <tbody>
@@ -2464,6 +2837,17 @@ function AdminTransactions() {
                           {isPaid ? 'Berhasil' : isCancelled ? 'Dibatalkan' : 'Menunggu'}
                         </span>
                       </td>
+                      <td className="text-right">
+                        <button
+                          type="button"
+                          className="icon-button icon-danger !size-7.5"
+                          onClick={() => setDeletingTransaction(t)}
+                          title="Hapus Transaksi"
+                          data-testid={`button-delete-transaction-${t.id}`}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
@@ -2472,6 +2856,17 @@ function AdminTransactions() {
           </div>
         )}
       </section>
+
+      {deletingTransaction && (
+        <ConfirmModal
+          title={`Hapus Transaksi ${deletingTransaction.requestCode}`}
+          message={`Apakah Anda yakin ingin menghapus transaksi ${deletingTransaction.requestCode} (${deletingTransaction.customerName}) senilai ${rupiah(deletingTransaction.amount)}? Tindakan ini akan menghapus riwayat transaksi secara permanen.`}
+          confirmText="Hapus Transaksi"
+          kind="danger"
+          onConfirm={handleConfirmDeleteTransaction}
+          onClose={() => setDeletingTransaction(null)}
+        />
+      )}
     </AppShell>
   );
 }
@@ -4246,29 +4641,11 @@ function ReportDetailModal({ report, onClose }: { report: FieldReportItem; onClo
             </div>
           </div>
 
-          {/* Media Attachments */}
-          <div>
-            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-              <Paperclip size={14} className="text-accent" /> Lampiran Dokumentasi Media ({report.media?.length || 0})
-            </h4>
-            {report.media && report.media.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {report.media.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center gap-2 rounded-xl border border-border/80 bg-card p-2.5 text-xs shadow-sm"
-                  >
-                    <div className="grid size-7 place-items-center rounded-lg bg-accent/15 text-accent font-mono text-[10px] font-bold">
-                      #{idx + 1}
-                    </div>
-                    <span className="font-mono text-xs truncate max-w-[220px]">{item}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground italic">Tidak ada lampiran foto/video pada laporan ini.</p>
-            )}
-          </div>
+          {/* Media Attachments with Live Preview & Direct Download */}
+          <ReportMediaGrid
+            mediaStrings={report.media}
+            title="Lampiran Dokumentasi Foto & Berkas Pekerja"
+          />
         </div>
 
         <div className="mt-6 flex justify-end border-t border-border pt-4">
@@ -4465,9 +4842,19 @@ function AdminReports() {
                       </td>
                       <td>
                         {report.media && report.media.length > 0 ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2.5 py-1 text-[11px] font-bold text-accent">
-                            <Paperclip size={12} /> {report.media.length} file
-                          </span>
+                          <div className="flex flex-col gap-1">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2.5 py-0.5 text-[11px] font-bold text-accent w-fit">
+                              <Paperclip size={11} /> {report.media.length} berkas
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedReport(report)}
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent hover:underline w-fit text-left"
+                              data-testid={`button-preview-report-table-${report.id}`}
+                            >
+                              <Eye size={11} /> Live Preview & Unduh
+                            </button>
+                          </div>
                         ) : (
                           <span className="text-[11px] text-muted-foreground">Tidak ada</span>
                         )}
@@ -4614,20 +5001,11 @@ function AssignmentDetailModal({
                 {report.notes}
               </div>
               {report.media && report.media.length > 0 && (
-                <div className="space-y-1.5 pt-1">
-                  <span className="text-[11px] font-bold text-muted-foreground block">
-                    Dokumentasi Foto / Media ({report.media.length}):
-                  </span>
-                  <div className="flex flex-wrap gap-2">
-                    {report.media.map((item, idx) => (
-                      <span
-                        key={idx}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1 text-xs font-mono text-accent"
-                      >
-                        <Paperclip size={12} /> {item}
-                      </span>
-                    ))}
-                  </div>
+                <div className="pt-2">
+                  <ReportMediaGrid
+                    mediaStrings={report.media}
+                    title="Dokumentasi Foto / Media Hasil Pekerjaan"
+                  />
                 </div>
               )}
             </div>
@@ -5000,32 +5378,47 @@ function AdminAssignmentHistory() {
 function WorkerReports() {
   const client = useQueryClient();
   const params = new URLSearchParams(window.location.search);
+  const queryParamRequestId = Number(params.get('request')) || 0;
   const requestsQuery = useListServiceRequests();
   const reportsQuery = useListFieldReports();
   const workersQuery = useListWorkers();
   const create = useCreateFieldReport();
 
   const workers = workersQuery.data ?? [];
+  const allServiceRequests = requestsQuery.data ?? [];
+  const targetFromParam = queryParamRequestId ? allServiceRequests.find((r) => r.id === queryParamRequestId) : undefined;
+
   const session = getAuthSession();
   const matchedWorker = workers.find((w) => w.name.toLowerCase() === session?.name?.toLowerCase());
   const [selectedWorkerId, setSelectedWorkerId] = useState<number | null>(null);
-  const activeWorkerId = selectedWorkerId ?? matchedWorker?.id ?? workers[0]?.id ?? 1;
+  const activeWorkerId = selectedWorkerId ?? targetFromParam?.assignedWorkerId ?? matchedWorker?.id ?? workers[0]?.id ?? 1;
 
   const [activeTab, setActiveTab] = useState<'create' | 'history'>('create');
-  const [requestId, setRequestId] = useState(Number(params.get('request')) || 0);
+  const [requestId, setRequestId] = useState(queryParamRequestId);
   const [notes, setNotes] = useState('');
   const [media, setMedia] = useState<string[]>([]);
   const [selectedReport, setSelectedReport] = useState<FieldReportItem | null>(null);
 
-  const requests = (requestsQuery.data ?? []).filter((r) => r.assignedWorkerId === activeWorkerId && r.status === 'on_site');
+  const requests = useMemo(() => {
+    return allServiceRequests.filter((r) => {
+      if (queryParamRequestId && r.id === queryParamRequestId) return true;
+      return (
+        r.assignedWorkerId === activeWorkerId &&
+        ['on_site', 'assigned', 'waiting_approval', 'in_progress'].includes(r.status)
+      );
+    });
+  }, [allServiceRequests, activeWorkerId, queryParamRequestId]);
+
   const allReports = reportsQuery.data ?? [];
   const myReports = allReports.filter((r) => r.assignedWorkerId === activeWorkerId || !r.assignedWorkerId);
 
   useEffect(() => {
-    if (requests.length > 0 && (!requestId || !requests.some(r => r.id === requestId))) {
+    if (queryParamRequestId && requests.some((r) => r.id === queryParamRequestId)) {
+      setRequestId(queryParamRequestId);
+    } else if (requests.length > 0 && (!requestId || !requests.some((r) => r.id === requestId))) {
       setRequestId(requests[0].id);
     }
-  }, [requests, requestId]);
+  }, [requests, requestId, queryParamRequestId]);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -5131,38 +5524,11 @@ function WorkerReports() {
                 />
               </Field>
 
-              <Field label="Media Pendukung" hint="Tambahkan nama file atau foto/video bukti di lokasi.">
-                <div className="upload-box">
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*,video/*"
-                    onChange={(e) =>
-                      setMedia(Array.from(e.target.files || []).map((f) => `${f.name} · ${Math.round(f.size / 1024)} KB`))
-                    }
-                    data-testid="input-report-media"
-                  />
-                  <Paperclip size={19} />
-                  <strong>Pilih foto atau video</strong>
-                  <span>File tidak dikirim sebelum Anda menekan simpan</span>
-                </div>
-                {media.length > 0 && (
-                  <div className="mt-3 space-y-2">
-                    {media.map((m) => (
-                      <div className="media-chip" key={m}>
-                        <Paperclip size={13} />
-                        {m}
-                        <button
-                          type="button"
-                          onClick={() => setMedia(media.filter((x) => x !== m))}
-                          data-testid={`button-remove-media-${m}`}
-                        >
-                          <X size={13} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <Field
+                label="Foto & Dokumen Hasil Pekerjaan"
+                hint="Unggah foto MCB, instalasi listrik, atau berkas pendukung (JPG, PNG, PDF). Admin dapat mempratinjau (live preview) dan mengunduh berkas ini langsung dari dashboard."
+              >
+                <WorkerMediaUploader value={media} onChange={setMedia} />
               </Field>
             </div>
 
@@ -5238,12 +5604,12 @@ function WorkerReports() {
                   </div>
 
                   {r.media && r.media.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {r.media.map((m, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 rounded-md bg-accent/10 px-2 py-0.5 text-[10px] font-mono text-accent">
-                          <Paperclip size={10} /> {m}
-                        </span>
-                      ))}
+                    <div className="pt-2">
+                      <ReportMediaGrid
+                        mediaStrings={r.media}
+                        title="Lampiran Media"
+                        showDownloadAll={false}
+                      />
                     </div>
                   )}
 

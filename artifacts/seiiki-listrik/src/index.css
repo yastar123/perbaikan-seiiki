@@ -1989,8 +1989,15 @@ textarea {
   max-width: 100%;
   overflow-x: auto;
   overscroll-behavior-inline: contain;
-  scrollbar-color: hsl(var(--border)) transparent;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
   -webkit-overflow-scrolling: touch;
+}
+
+.table-scroll::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 .table-scroll table {
@@ -2701,4 +2708,71 @@ textarea {
   width: 100%;
   max-width: 520px;
 }
+
+/* Infinity Carousel for Activity Gallery */
+@keyframes infinite-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.gallery-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: infinite-scroll 45s linear infinite;
+  will-change: transform;
+}
+
+.gallery-marquee-track:hover {
+  animation-play-state: paused;
+}
+
+.gallery-marquee-track.is-paused {
+  animation-play-state: paused;
+}
+
+.gallery-card-hover {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.gallery-card-hover:hover {
+  transform: translateY(-6px) scale(1.02);
+}
+
+/* ==========================================================================
+   Global Scrollbar Appearance Removal (Preserving Full Scroll Functionality)
+   ========================================================================== */
+
+/* Hide scrollbar for Chrome, Safari, Edge, Opera, and all WebKit/Blink browsers */
+*::-webkit-scrollbar,
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+/* Hide scrollbar for Firefox and IE/Edge */
+html,
+body,
+*,
+*::before,
+*::after {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+/* Ensure table headers with dark background (like #1e4e79) always have crisp white text */
+table thead tr.bg-\[\#1e4e79\] th,
+table thead tr[class*="bg-[#1e4e79]"] th,
+.nidi-modal-table thead th,
+thead tr[class*="bg-[#1e4e79]"] th {
+  color: #ffffff !important;
+}
+
+
 
