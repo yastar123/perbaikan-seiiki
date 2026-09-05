@@ -5,7 +5,8 @@ import {
   ShieldCheck, Clock3, MessageCircle, ReceiptText, Wrench, Zap, CheckCircle2,
   Sparkles, Headphones, Award, MapPin, CalendarDays, HelpCircle, AlertTriangle,
   Flame, HardHat, Hammer, Eye, Compass, ThumbsUp, HeartHandshake, PhoneCall,
-  ChevronUp, ChevronDown, Check, X, ArrowRight, Layout, Sliders, Menu, Footprints
+  ChevronUp, ChevronDown, Check, X, ArrowRight, Layout, Sliders, Menu, Footprints,
+  Image as ImageIcon, Layers, AlertCircle
 } from 'lucide-react';
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -83,6 +84,40 @@ export interface CmsFooter {
   whatsappContact: string;
 }
 
+export interface CmsDisclaimerStep {
+  step: string;
+  title: string;
+  example: string;
+}
+
+export interface CmsDisclaimer {
+  enabled: boolean;
+  eyebrow: string;
+  tagText: string;
+  title: string;
+  description: string;
+  steps: CmsDisclaimerStep[];
+  noticeText: string;
+}
+
+export interface CmsGalleryItem {
+  id: string | number;
+  src: string;
+  badge: string;
+  category: string;
+  title: string;
+  desc: string;
+}
+
+export interface CmsGallery {
+  enabled: boolean;
+  eyebrow: string;
+  tagText: string;
+  title: string;
+  description: string;
+  items: CmsGalleryItem[];
+}
+
 export interface CmsLandingContent {
   id?: number;
   navbar: CmsNavbar;
@@ -90,6 +125,8 @@ export interface CmsLandingContent {
   hero: CmsHero;
   assurance: CmsAssurance;
   footer: CmsFooter;
+  disclaimer?: CmsDisclaimer;
+  gallery?: CmsGallery;
   updatedAt?: string;
 }
 
@@ -141,7 +178,7 @@ export function AdminCms() {
   const queryClient = useQueryClient();
   const { data: serverData, isLoading, isError, refetch } = useLandingCms();
 
-  const [activeTab, setActiveTab] = useState<'navbar' | 'flow' | 'hero' | 'assurance' | 'footer' | 'preview'>('navbar');
+  const [activeTab, setActiveTab] = useState<'navbar' | 'flow' | 'hero' | 'assurance' | 'disclaimer' | 'gallery' | 'footer' | 'preview'>('navbar');
   const [formData, setFormData] = useState<CmsLandingContent | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -152,6 +189,8 @@ export function AdminCms() {
   const [heroBadgeModal, setHeroBadgeModal] = useState<{ mode: 'add' | 'edit'; badge?: CmsHeroBadge; index?: number } | null>(null);
   const [assuranceItemModal, setAssuranceItemModal] = useState<{ mode: 'add' | 'edit'; item?: CmsAssuranceItem; index?: number } | null>(null);
   const [footerLinkModal, setFooterLinkModal] = useState<{ mode: 'add' | 'edit'; link?: CmsFooterLink; index?: number } | null>(null);
+  const [disclaimerStepModal, setDisclaimerStepModal] = useState<{ mode: 'add' | 'edit'; step?: CmsDisclaimerStep; index?: number } | null>(null);
+  const [galleryItemModal, setGalleryItemModal] = useState<{ mode: 'add' | 'edit'; item?: CmsGalleryItem; index?: number } | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // Sync server data to form state
@@ -224,6 +263,41 @@ export function AdminCms() {
   }
 
   if (!formData) return null;
+
+  const disclaimerData: CmsDisclaimer = formData.disclaimer || {
+    enabled: true,
+    eyebrow: 'Disclaimer Jangkauan Layanan',
+    tagText: 'Penting',
+    title: 'Wilayah di Luar Pilihan Input Tidak Akan Dilayani',
+    description: 'Teknisi SEIIKI hanya dapat melayani kunjungan pada wilayah administratif yang terdaftar dan dapat dipilih secara lengkap bertahap pada formulir:',
+    steps: [
+      { step: 'Langkah 1/4', title: 'Provinsi', example: 'Contoh: Lampung' },
+      { step: 'Langkah 2/4', title: 'Kabupaten / Kota', example: 'Contoh: Bandar Lampung' },
+      { step: 'Langkah 3/4', title: 'Kecamatan', example: 'Contoh: Langkapura' },
+      { step: 'Langkah 4/4', title: 'Kelurahan / Desa', example: 'Pilih yang terdaftar' },
+    ],
+    noticeText: 'Apabila lokasi/wilayah tempat tinggal Anda tidak tersedia atau tidak ada dalam opsi pilihan (Langkah 1 s/d 4), mohon maaf pesanan kunjungan TIDAK AKAN DILAYANI.',
+  };
+
+  const galleryData: CmsGallery = formData.gallery || {
+    enabled: true,
+    eyebrow: 'Dokumentasi Kegiatan Nyata',
+    tagText: '10 Foto Lapangan',
+    title: 'Galeri Kegiatan & Pekerjaan Teknisi',
+    description: 'Dokumentasi pekerjaan langsung dari lokasi kunjungan pelanggan — dari instalasi panel, perbaikan jalur, hingga uji kelaikan operasi.',
+    items: [
+      { id: '1', src: `${basePath}/galeri-1.jpeg`, badge: '01', category: 'Panel & Distribusi', title: 'Pemasangan & Pengkabelan Panel Listrik', desc: 'Pengkabelan rapi dan tertata sesuai standar teknis keselamatan ketenagalistrikan (PUIL).' },
+      { id: '2', src: `${basePath}/galeri-2.jpeg`, badge: '02', category: 'Proteksi Sirkit', title: 'Penyetelan & Penggantian MCB Utama', desc: 'Pemasangan sakelar pemutus otomatis berkualitas tinggi guna mencegah beban lebih dan lonjakan arus.' },
+      { id: '3', src: `${basePath}/galeri-3.jpeg`, badge: '03', category: 'Pemeriksaan Kabel', title: 'Inspeksi & Pemetaan Jalur Kabel Bangunan', desc: 'Pemeriksaan kelayakan isolasi jalur utama serta penataan rapian kabel di area plafon.' },
+      { id: '4', src: `${basePath}/galeri-4.jpeg`, badge: '04', category: 'Penanganan Darurat', title: 'Perbaikan Korsleting & Putus Arus', desc: 'Penanganan cepat tim tanggap darurat saat terjadi kebocoran arus dan percikan listrik.' },
+      { id: '5', src: `${basePath}/galeri-5.jpeg`, badge: '05', category: 'Pengukuran & Uji', title: 'Pengujian Grounding & Pembumian Instalasi', desc: 'Pengukuran resistansi pembumian menggunakan alat ukur khusus demi standar keamanan SLO.' },
+      { id: '6', src: `${basePath}/galeri-6.jpeg`, badge: '06', category: 'Sertifikasi NIDI & SLO', title: 'Supervisi & Pemeriksaan Kelaikan Operasi', desc: 'Pemeriksaan teknis menyeluruh sebagai syarat penerbitan NIDI dan Sertifikat Laik Operasi.' },
+      { id: '7', src: `${basePath}/galeri-7.jpeg`, badge: '07', category: 'Layanan Penerangan', title: 'Instalasi Titik Lampu & Armatur Komersial', desc: 'Pemasangan armatur penerangan ruangan dan outdoor berkekuatan tinggi secara presisi.' },
+      { id: '8', src: `${basePath}/galeri-8.jpeg`, badge: '08', category: 'Jaringan Distribusi', title: 'Pemeriksaan KWH Meter & Jalur Masuk PLN', desc: 'Koordinasi kelayakan sambungan instalasi pelanggan menuju terminal KWH meter PLN.' },
+      { id: '9', src: `${basePath}/galeri-9.jpeg`, badge: '09', category: 'Daya Besar & Industri', title: 'Perakitan Panel Tiga Fasa (3-Phase)', desc: 'Konfigurasi beban seimbang tiga fasa untuk kebutuhan gedung usaha dan peralatan industri.' },
+      { id: '10', src: `${basePath}/galeri-10.jpeg`, badge: '10', category: 'Perawatan Berkala', title: 'Perawatan & Cleaning Komponen Panel', desc: 'Pembersihan rutin debu dan kekencangan baut terminal kabel guna mencegah bahaya panas berlebih.' },
+    ],
+  };
 
   const handleSave = () => {
     updateMutation.mutate(formData);
@@ -316,7 +390,9 @@ export function AdminCms() {
           { id: 'flow', label: '2. Alur SEIIKI', icon: Footprints },
           { id: 'hero', label: '3. Hero & Layanan', icon: Sparkles },
           { id: 'assurance', label: '4. Jaminan Kami', icon: ShieldCheck },
-          { id: 'footer', label: '5. Footer & Kontak', icon: Layout },
+          { id: 'disclaimer', label: '5. Disclaimer Jangkauan', icon: AlertTriangle },
+          { id: 'gallery', label: '6. Galeri Kegiatan (10 Foto)', icon: ImageIcon },
+          { id: 'footer', label: '7. Footer & Kontak', icon: Layout },
           { id: 'preview', label: 'Pratinjau Langsung', icon: Eye },
         ].map((tab) => {
           const Icon = tab.icon;
@@ -913,7 +989,312 @@ export function AdminCms() {
         </div>
       )}
 
-      {/* TAB 5: FOOTER & KONTAK */}
+      {/* TAB 5: DISCLAIMER JANGKAUAN LAYANAN */}
+      {activeTab === 'disclaimer' && (
+        <div className="space-y-6 rise-in">
+          <div className="panel p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div>
+                <h3 className="text-base font-bold">Disclaimer Jangkauan Layanan</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Pengaturan komponen peringatan batasan wilayah operasional teknisi.</p>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={disclaimerData.enabled !== false}
+                  onChange={(e) => updateSection('disclaimer', { ...disclaimerData, enabled: e.target.checked })}
+                  className="rounded border-border text-primary focus:ring-primary h-4 w-4"
+                />
+                <span className="text-xs font-bold">Tampilkan Komponen Disclaimer</span>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-bold text-foreground block mb-1">Eyebrow Teks</label>
+                <input
+                  type="text"
+                  value={disclaimerData.eyebrow}
+                  onChange={(e) => updateSection('disclaimer', { ...disclaimerData, eyebrow: e.target.value })}
+                  placeholder="Disclaimer Jangkauan Layanan"
+                  className="w-full"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-foreground block mb-1">Tag/Badge Teks</label>
+                <input
+                  type="text"
+                  value={disclaimerData.tagText}
+                  onChange={(e) => updateSection('disclaimer', { ...disclaimerData, tagText: e.target.value })}
+                  placeholder="Penting"
+                  className="w-full"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="text-xs font-bold text-foreground block mb-1">Judul Utama Disclaimer</label>
+                <input
+                  type="text"
+                  value={disclaimerData.title}
+                  onChange={(e) => updateSection('disclaimer', { ...disclaimerData, title: e.target.value })}
+                  placeholder="Wilayah di Luar Pilihan Input Tidak Akan Dilayani"
+                  className="w-full font-bold"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="text-xs font-bold text-foreground block mb-1">Deskripsi Singkat</label>
+                <textarea
+                  rows={2}
+                  value={disclaimerData.description}
+                  onChange={(e) => updateSection('disclaimer', { ...disclaimerData, description: e.target.value })}
+                  placeholder="Teknisi SEIIKI hanya dapat melayani kunjungan pada wilayah administratif yang terdaftar..."
+                  className="w-full text-xs"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="text-xs font-bold text-foreground block mb-1">Teks Peringatan/Perhatian (Kotak Merah)</label>
+                <textarea
+                  rows={2}
+                  value={disclaimerData.noticeText}
+                  onChange={(e) => updateSection('disclaimer', { ...disclaimerData, noticeText: e.target.value })}
+                  placeholder="Apabila lokasi/wilayah tempat tinggal Anda tidak tersedia..."
+                  className="w-full text-xs font-medium text-destructive bg-destructive/5"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Steps Breakdown CRUD */}
+          <div className="panel p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div>
+                <h3 className="text-base font-bold">Langkah Hierarki Wilayah Admin (4 Tingkat)</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Urutan pilihan wilayah pada formulir pemesanan kunjungan.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDisclaimerStepModal({ mode: 'add' })}
+                className="btn btn-outline !px-3 !py-1.5 text-xs font-bold gap-1.5"
+              >
+                <Plus size={14} /> Tambah Langkah
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+              {disclaimerData.steps.map((s, idx) => (
+                <div key={idx} className="p-3.5 rounded-xl border border-border bg-card space-y-2 relative group">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[10px] font-bold text-muted-foreground uppercase">{s.step}</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setDisclaimerStepModal({ mode: 'edit', step: s, index: idx })}
+                        className="p-1 hover:text-primary rounded"
+                        title="Edit"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newSteps = disclaimerData.steps.filter((_, i) => i !== idx);
+                          updateSection('disclaimer', { ...disclaimerData, steps: newSteps });
+                        }}
+                        className="p-1 hover:text-destructive rounded"
+                        title="Hapus"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="font-bold text-xs text-foreground">{s.title}</div>
+                  <div className="text-[11px] text-muted-foreground italic">{s.example}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 6: GALERI KEGIATAN & PEKERJAAN TEKNISI (10 FOTO LAPANGAN) */}
+      {activeTab === 'gallery' && (
+        <div className="space-y-6 rise-in">
+          <div className="panel p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div>
+                <h3 className="text-base font-bold">Galeri Kegiatan & Dokumentasi Lapangan</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Kelola foto-foto dokumentasi pekerjaan nyata teknisi yang ditampilkan pada galeri berjalan.</p>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={galleryData.enabled !== false}
+                  onChange={(e) => updateSection('gallery', { ...galleryData, enabled: e.target.checked })}
+                  className="rounded border-border text-primary focus:ring-primary h-4 w-4"
+                />
+                <span className="text-xs font-bold">Tampilkan Galeri</span>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-bold text-foreground block mb-1">Eyebrow Teks</label>
+                <input
+                  type="text"
+                  value={galleryData.eyebrow}
+                  onChange={(e) => updateSection('gallery', { ...galleryData, eyebrow: e.target.value })}
+                  placeholder="Dokumentasi Kegiatan Nyata"
+                  className="w-full"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-foreground block mb-1">Tag / Counter Badge</label>
+                <input
+                  type="text"
+                  value={galleryData.tagText}
+                  onChange={(e) => updateSection('gallery', { ...galleryData, tagText: e.target.value })}
+                  placeholder="10 Foto Lapangan"
+                  className="w-full"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="text-xs font-bold text-foreground block mb-1">Judul Utama Galeri</label>
+                <input
+                  type="text"
+                  value={galleryData.title}
+                  onChange={(e) => updateSection('gallery', { ...galleryData, title: e.target.value })}
+                  placeholder="Galeri Kegiatan & Pekerjaan Teknisi"
+                  className="w-full font-bold"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="text-xs font-bold text-foreground block mb-1">Deskripsi Singkat</label>
+                <textarea
+                  rows={2}
+                  value={galleryData.description}
+                  onChange={(e) => updateSection('gallery', { ...galleryData, description: e.target.value })}
+                  placeholder="Dokumentasi pekerjaan langsung dari lokasi kunjungan pelanggan..."
+                  className="w-full text-xs"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Photo Items List */}
+          <div className="panel p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div>
+                <h3 className="text-base font-bold">Daftar Foto Lapangan ({galleryData.items.length} Foto)</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Tambah, edit, hapus, atau atur urutan foto kegiatan teknisi.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setGalleryItemModal({ mode: 'add' })}
+                className="btn btn-primary !px-3.5 !py-2 text-xs font-bold gap-1.5 shadow-xs"
+              >
+                <Plus size={14} /> Tambah Foto Lapangan
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {galleryData.items.map((item, idx) => (
+                <div key={item.id} className="rounded-2xl border border-border bg-card overflow-hidden flex flex-col shadow-xs group">
+                  <div className="relative aspect-[4/3] bg-muted overflow-hidden">
+                    <img
+                      src={item.src}
+                      alt={item.title}
+                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = 'none';
+                      }}
+                    />
+                    <div className="absolute top-2 left-2 flex gap-1">
+                      <span className="bg-primary text-primary-foreground text-[10px] font-mono font-bold px-2 py-0.5 rounded-full shadow-xs">
+                        #{item.badge}
+                      </span>
+                      <span className="bg-black/70 backdrop-blur-xs text-white text-[10px] font-medium px-2 py-0.5 rounded-full">
+                        {item.category}
+                      </span>
+                    </div>
+
+                    <div className="absolute bottom-2 right-2 flex items-center gap-1 bg-black/80 backdrop-blur-xs p-1 rounded-lg">
+                      {idx > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newItems = [...galleryData.items];
+                            const temp = newItems[idx - 1];
+                            newItems[idx - 1] = newItems[idx];
+                            newItems[idx] = temp;
+                            updateSection('gallery', { ...galleryData, items: newItems });
+                          }}
+                          className="p-1 hover:text-white text-gray-300 transition-colors"
+                          title="Geser Kiri"
+                        >
+                          <ChevronUp size={14} className="-rotate-90" />
+                        </button>
+                      )}
+                      {idx < galleryData.items.length - 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newItems = [...galleryData.items];
+                            const temp = newItems[idx + 1];
+                            newItems[idx + 1] = newItems[idx];
+                            newItems[idx] = temp;
+                            updateSection('gallery', { ...galleryData, items: newItems });
+                          }}
+                          className="p-1 hover:text-white text-gray-300 transition-colors"
+                          title="Geser Kanan"
+                        >
+                          <ChevronDown size={14} className="-rotate-90" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setGalleryItemModal({ mode: 'edit', item, index: idx })}
+                        className="p-1 text-amber-400 hover:text-amber-300 transition-colors"
+                        title="Edit Foto"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newItems = galleryData.items.filter((_, i) => i !== idx);
+                          updateSection('gallery', { ...galleryData, items: newItems });
+                        }}
+                        className="p-1 text-rose-400 hover:text-rose-300 transition-colors"
+                        title="Hapus Foto"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 flex-1 flex flex-col justify-between space-y-1.5">
+                    <div>
+                      <h4 className="font-bold text-xs text-foreground line-clamp-1">{item.title}</h4>
+                      <p className="text-[11px] text-muted-foreground line-clamp-2 mt-1 leading-relaxed">{item.desc}</p>
+                    </div>
+                    <div className="text-[10px] font-mono text-muted-foreground truncate pt-1 border-t border-border/50">
+                      URL: {item.src}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 7: FOOTER & KONTAK */}
       {activeTab === 'footer' && (
         <div className="space-y-6 rise-in">
           <div className="panel p-5 space-y-4">
@@ -1496,6 +1877,200 @@ export function AdminCms() {
               </button>
               <button type="submit" className="btn btn-primary text-xs font-bold">
                 <Check size={14} /> Simpan Tautan
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* MODAL: DISCLAIMER STEP */}
+      {disclaimerStepModal && (
+        <div className="modal-backdrop">
+          <form
+            className="modal"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const form = e.currentTarget;
+              const step = (form.elements.namedItem('step') as HTMLInputElement).value.trim();
+              const title = (form.elements.namedItem('title') as HTMLInputElement).value.trim();
+              const example = (form.elements.namedItem('example') as HTMLInputElement).value.trim();
+              if (!step || !title) return;
+
+              const newSteps = [...disclaimerData.steps];
+              if (disclaimerStepModal.mode === 'edit' && disclaimerStepModal.index !== undefined) {
+                newSteps[disclaimerStepModal.index] = { step, title, example };
+              } else {
+                newSteps.push({ step, title, example });
+              }
+              updateSection('disclaimer', { ...disclaimerData, steps: newSteps });
+              setDisclaimerStepModal(null);
+            }}
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="eyebrow">{disclaimerStepModal.mode === 'edit' ? 'Edit Langkah Disclaimer' : 'Langkah Disclaimer Baru'}</div>
+                <h3 className="text-base font-bold">Langkah Tingkat Wilayah</h3>
+              </div>
+              <button type="button" className="icon-button" onClick={() => setDisclaimerStepModal(null)}>
+                <X size={17} />
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              <div>
+                <label className="text-xs font-bold block mb-1">Label Langkah (Misal: Langkah 1/4)</label>
+                <input
+                  name="step"
+                  required
+                  defaultValue={disclaimerStepModal.step?.step || `Langkah ${disclaimerData.steps.length + 1}/4`}
+                  placeholder="Langkah 1/4"
+                  className="w-full font-mono text-xs"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold block mb-1">Tingkat Wilayah / Judul</label>
+                <input
+                  name="title"
+                  required
+                  defaultValue={disclaimerStepModal.step?.title || ''}
+                  placeholder="Contoh: Provinsi"
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold block mb-1">Contoh Teks Subtitle</label>
+                <input
+                  name="example"
+                  defaultValue={disclaimerStepModal.step?.example || ''}
+                  placeholder="Contoh: Lampung"
+                  className="w-full text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" className="btn btn-outline text-xs" onClick={() => setDisclaimerStepModal(null)}>
+                Batal
+              </button>
+              <button type="submit" className="btn btn-primary text-xs font-bold">
+                <Check size={14} /> Simpan Langkah
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* MODAL: GALLERY ITEM */}
+      {galleryItemModal && (
+        <div className="modal-backdrop">
+          <form
+            className="modal max-w-lg"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const form = e.currentTarget;
+              const src = (form.elements.namedItem('src') as HTMLInputElement).value.trim();
+              const badge = (form.elements.namedItem('badge') as HTMLInputElement).value.trim();
+              const category = (form.elements.namedItem('category') as HTMLInputElement).value.trim();
+              const title = (form.elements.namedItem('title') as HTMLInputElement).value.trim();
+              const desc = (form.elements.namedItem('desc') as HTMLTextAreaElement).value.trim();
+              if (!src || !title) return;
+
+              const newItems = [...galleryData.items];
+              if (galleryItemModal.mode === 'edit' && galleryItemModal.index !== undefined) {
+                newItems[galleryItemModal.index] = {
+                  ...newItems[galleryItemModal.index],
+                  src,
+                  badge: badge || '01',
+                  category: category || 'Teknikal',
+                  title,
+                  desc,
+                };
+              } else {
+                newItems.push({
+                  id: `photo-${Date.now()}`,
+                  src,
+                  badge: badge || String(newItems.length + 1).padStart(2, '0'),
+                  category: category || 'Teknikal',
+                  title,
+                  desc,
+                });
+              }
+              updateSection('gallery', { ...galleryData, items: newItems });
+              setGalleryItemModal(null);
+            }}
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="eyebrow">{galleryItemModal.mode === 'edit' ? 'Edit Foto Lapangan' : 'Tambah Foto Lapangan'}</div>
+                <h3 className="text-base font-bold">Dokumentasi Kegiatan</h3>
+              </div>
+              <button type="button" className="icon-button" onClick={() => setGalleryItemModal(null)}>
+                <X size={17} />
+              </button>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              <div>
+                <label className="text-xs font-bold block mb-1">URL / Path Gambar Foto</label>
+                <input
+                  name="src"
+                  required
+                  defaultValue={galleryItemModal.item?.src || `${basePath}/galeri-1.jpeg`}
+                  placeholder="Contoh: /galeri-1.jpeg atau https://..."
+                  className="w-full font-mono text-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold block mb-1">Nomor Badge</label>
+                  <input
+                    name="badge"
+                    defaultValue={galleryItemModal.item?.badge || String(galleryData.items.length + 1).padStart(2, '0')}
+                    placeholder="01"
+                    className="w-full font-mono text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold block mb-1">Kategori Pekerjaan</label>
+                  <input
+                    name="category"
+                    defaultValue={galleryItemModal.item?.category || 'Panel & Distribusi'}
+                    placeholder="Contoh: Panel & Distribusi"
+                    className="w-full text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold block mb-1">Judul Foto Dokumentasi</label>
+                <input
+                  name="title"
+                  required
+                  defaultValue={galleryItemModal.item?.title || ''}
+                  placeholder="Contoh: Pemasangan & Pengkabelan Panel Listrik"
+                  className="w-full"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold block mb-1">Deskripsi/Penjelasan Kegiatan</label>
+                <textarea
+                  name="desc"
+                  rows={3}
+                  defaultValue={galleryItemModal.item?.desc || ''}
+                  placeholder="Penjelasan ringkas pekerjaan yang dikerjakan teknisi..."
+                  className="w-full text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" className="btn btn-outline text-xs" onClick={() => setGalleryItemModal(null)}>
+                Batal
+              </button>
+              <button type="submit" className="btn btn-primary text-xs font-bold">
+                <Check size={14} /> Simpan Foto
               </button>
             </div>
           </form>

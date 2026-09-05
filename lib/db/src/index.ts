@@ -153,8 +153,12 @@ const SCHEMA_DDL = `
     hero JSONB NOT NULL,
     assurance JSONB NOT NULL,
     footer JSONB NOT NULL,
+    disclaimer JSONB,
+    gallery JSONB,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
+  ALTER TABLE landing_cms ADD COLUMN IF NOT EXISTS disclaimer JSONB;
+  ALTER TABLE landing_cms ADD COLUMN IF NOT EXISTS gallery JSONB;
   ALTER TABLE transactions ADD COLUMN IF NOT EXISTS order_id TEXT;
   ALTER TABLE transactions ADD COLUMN IF NOT EXISTS paywuz_id TEXT;
   ALTER TABLE transactions ADD COLUMN IF NOT EXISTS payment_method TEXT;

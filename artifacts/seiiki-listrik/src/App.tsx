@@ -745,6 +745,44 @@ function Stat({ label, value, note, icon: Icon, accent = 'yellow' }: { label: st
 }
 function RequestTable({ requests, onAssign, onManage, onDelete, compact = false }: { requests: ServiceRequest[]; onAssign?: (r: ServiceRequest) => void; onManage?: (r: ServiceRequest) => void; onDelete?: (r: ServiceRequest) => void; compact?: boolean }) {
   if (!requests.length) return <Empty title="Belum ada permintaan" body="Permintaan baru akan muncul di sini setelah pelanggan mengisi form." />;
+
+  if (compact) {
+    return (
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Nama</th>
+              <th>Jenis Layanan</th>
+              <th className="text-right">Nominal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {requests.slice(0, 5).map((r) => {
+              const nominal = (r.totalAmount || r.visitFee || 25000) + (r.repairCost || 0);
+              return (
+                <tr key={r.id} data-testid={`row-request-${r.id}`}>
+                  <td>
+                    <strong className="block text-sm font-semibold text-foreground">{r.customerName}</strong>
+                    <span className="block text-[11px] font-mono text-muted-foreground">{r.code}</span>
+                  </td>
+                  <td>
+                    <span className="text-xs font-medium text-foreground">{r.serviceType}</span>
+                  </td>
+                  <td className="text-right">
+                    <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                      {rupiah(nominal)}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
   return (
     <div className="table-scroll">
       <table>
@@ -761,7 +799,7 @@ function RequestTable({ requests, onAssign, onManage, onDelete, compact = false 
           </tr>
         </thead>
         <tbody>
-          {requests.slice(0, compact ? 4 : undefined).map((r) => {
+          {requests.map((r) => {
             const hasCoords = typeof r.latitude === 'number' && typeof r.longitude === 'number';
             const mapsUrl = hasCoords
               ? `https://www.google.com/maps?q=${r.latitude},${r.longitude}`
@@ -967,9 +1005,10 @@ const CUSTOMER_GALLERY_IMAGES = [
 
 interface ActivityGalleryCarouselProps {
   onSelectPhoto: (index: number) => void;
+  galleryCms?: CmsGallery;
 }
 
-function ActivityGalleryCarousel({ onSelectPhoto }: ActivityGalleryCarouselProps) {
+function ActivityGalleryCarousel({ onSelectPhoto, galleryCms }: ActivityGalleryCarouselProps) {
   const [isPaused, setIsPaused] = useState(false);
 
   const handleScroll = (direction: 'left' | 'right') => {
@@ -983,8 +1022,14 @@ function ActivityGalleryCarousel({ onSelectPhoto }: ActivityGalleryCarouselProps
     }
   };
 
+  const eyebrow = galleryCms?.eyebrow || 'Dokumentasi Kegiatan Nyata';
+  const tagText = galleryCms?.tagText || '10 Foto Lapangan';
+  const title = galleryCms?.title || 'Galeri Kegiatan & Pekerjaan Teknisi';
+  const description = galleryCms?.description || 'Dokumentasi pekerjaan langsung dari lokasi kunjungan pelanggan — dari instalasi panel, perbaikan jalur, hingga uji kelaikan operasi.';
+  const items = galleryCms?.items && galleryCms.items.length > 0 ? galleryCms.items : CUSTOMER_GALLERY_IMAGES;
+
   // Double items for seamless infinite marquee illusion
-  const loopedItems = [...CUSTOMER_GALLERY_IMAGES, ...CUSTOMER_GALLERY_IMAGES];
+  const loopedItems = [...items, ...items];
 
   return (
     <section
@@ -1000,16 +1045,16 @@ function ActivityGalleryCarousel({ onSelectPhoto }: ActivityGalleryCarouselProps
         <div>
           <div className="eyebrow flex items-center gap-2">
             <span className="status-dot bg-accent" />
-            <span>Dokumentasi Kegiatan Nyata</span>
+            <span>{eyebrow}</span>
             <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold text-primary">
-              10 Foto Lapangan
+              {tagText}
             </span>
           </div>
           <h2 className="mt-1 text-lg sm:text-2xl font-bold tracking-tight text-foreground">
-            Galeri Kegiatan & Pekerjaan Teknisi
+            {title}
           </h2>
           <p className="mt-1 max-w-xl text-xs sm:text-sm text-muted-foreground leading-relaxed">
-            Dokumentasi pekerjaan langsung dari lokasi kunjungan pelanggan — dari instalasi panel, perbaikan jalur, hingga uji kelaikan operasi.
+            {description}
           </p>
         </div>
 
@@ -1064,7 +1109,7 @@ function ActivityGalleryCarousel({ onSelectPhoto }: ActivityGalleryCarouselProps
         >
           <div className={`gallery-marquee-track ${isPaused ? 'is-paused' : ''}`}>
             {loopedItems.map((item, idx) => {
-              const originalIndex = idx % CUSTOMER_GALLERY_IMAGES.length;
+              const originalIndex = idx % items.length;
               return (
                 <div
                   key={`${item.id}-${idx}`}
@@ -1362,60 +1407,54 @@ function CustomerHome() {
           </div>
 
           {/* Location Coverage Disclaimer Component */}
-          <div className="mt-8 rounded-2xl border border-destructive/30 bg-destructive/5 p-5 md:p-6 shadow-sm">
-            <div className="flex items-start gap-3.5">
-              <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-destructive text-destructive-foreground shadow-sm">
-                <AlertTriangle size={18} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-destructive">
-                    Disclaimer Jangkauan Layanan
-                  </span>
-                  <span className="rounded-md bg-destructive/15 px-2 py-0.5 text-[10px] font-bold text-destructive">
-                    Penting
-                  </span>
+          {cms?.disclaimer?.enabled !== false && (
+            <div className="mt-8 rounded-2xl border border-destructive/30 bg-destructive/5 p-5 md:p-6 shadow-sm">
+              <div className="flex items-start gap-3.5">
+                <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-destructive text-destructive-foreground shadow-sm">
+                  <AlertTriangle size={18} />
                 </div>
-                <h4 className="mt-1 text-sm font-bold text-foreground md:text-base">
-                  Wilayah di Luar Pilihan Input Tidak Akan Dilayani
-                </h4>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground md:text-sm">
-                  Teknisi SEIIKI hanya dapat melayani kunjungan pada wilayah administratif yang terdaftar dan dapat dipilih secara lengkap bertahap pada formulir:
-                </p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-destructive">
+                      {cms?.disclaimer?.eyebrow || 'Disclaimer Jangkauan Layanan'}
+                    </span>
+                    <span className="rounded-md bg-destructive/15 px-2 py-0.5 text-[10px] font-bold text-destructive">
+                      {cms?.disclaimer?.tagText || 'Penting'}
+                    </span>
+                  </div>
+                  <h4 className="mt-1 text-sm font-bold text-foreground md:text-base">
+                    {cms?.disclaimer?.title || 'Wilayah di Luar Pilihan Input Tidak Akan Dilayani'}
+                  </h4>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground md:text-sm">
+                    {cms?.disclaimer?.description || 'Teknisi SEIIKI hanya dapat melayani kunjungan pada wilayah administratif yang terdaftar dan dapat dipilih secara lengkap bertahap pada formulir:'}
+                  </p>
 
-                {/* 4 Step Hierarchy Preview */}
-                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  <div className="rounded-xl border border-border/80 bg-background/90 p-2.5">
-                    <div className="text-[10px] font-mono text-muted-foreground uppercase">Langkah 1/4</div>
-                    <div className="text-xs font-bold text-foreground mt-0.5">Provinsi</div>
-                    <div className="text-[11px] text-muted-foreground truncate">Contoh: Lampung</div>
+                  {/* Step Hierarchy Preview */}
+                  <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {(cms?.disclaimer?.steps || [
+                      { step: 'Langkah 1/4', title: 'Provinsi', example: 'Contoh: Lampung' },
+                      { step: 'Langkah 2/4', title: 'Kabupaten / Kota', example: 'Contoh: Bandar Lampung' },
+                      { step: 'Langkah 3/4', title: 'Kecamatan', example: 'Contoh: Langkapura' },
+                      { step: 'Langkah 4/4', title: 'Kelurahan / Desa', example: 'Pilih yang terdaftar' },
+                    ]).map((s, idx) => (
+                      <div key={idx} className="rounded-xl border border-border/80 bg-background/90 p-2.5">
+                        <div className="text-[10px] font-mono text-muted-foreground uppercase">{s.step}</div>
+                        <div className="text-xs font-bold text-foreground mt-0.5">{s.title}</div>
+                        <div className="text-[11px] text-muted-foreground truncate">{s.example}</div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="rounded-xl border border-border/80 bg-background/90 p-2.5">
-                    <div className="text-[10px] font-mono text-muted-foreground uppercase">Langkah 2/4</div>
-                    <div className="text-xs font-bold text-foreground mt-0.5">Kabupaten / Kota</div>
-                    <div className="text-[11px] text-muted-foreground truncate">Contoh: Bandar Lampung</div>
-                  </div>
-                  <div className="rounded-xl border border-border/80 bg-background/90 p-2.5">
-                    <div className="text-[10px] font-mono text-muted-foreground uppercase">Langkah 3/4</div>
-                    <div className="text-xs font-bold text-foreground mt-0.5">Kecamatan</div>
-                    <div className="text-[11px] text-muted-foreground truncate">Contoh: Langkapura</div>
-                  </div>
-                  <div className="rounded-xl border border-border/80 bg-background/90 p-2.5">
-                    <div className="text-[10px] font-mono text-muted-foreground uppercase">Langkah 4/4</div>
-                    <div className="text-xs font-bold text-foreground mt-0.5">Kelurahan / Desa</div>
-                    <div className="text-[11px] text-muted-foreground truncate">Pilih yang terdaftar</div>
-                  </div>
-                </div>
 
-                <div className="mt-3 flex items-start gap-2 rounded-lg bg-destructive/10 p-2.5 text-xs font-medium text-destructive">
-                  <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-                  <span>
-                    <strong>Perhatian:</strong> Apabila lokasi/wilayah tempat tinggal Anda tidak tersedia atau tidak ada dalam opsi pilihan (Langkah 1 s/d 4), mohon maaf pesanan kunjungan <strong>TIDAK AKAN DILAYANI</strong>.
-                  </span>
+                  <div className="mt-3 flex items-start gap-2 rounded-lg bg-destructive/10 p-2.5 text-xs font-medium text-destructive">
+                    <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                    <span>
+                      <strong>Perhatian:</strong> {cms?.disclaimer?.noticeText || 'Apabila lokasi/wilayah tempat tinggal Anda tidak tersedia atau tidak ada dalam opsi pilihan (Langkah 1 s/d 4), mohon maaf pesanan kunjungan TIDAK AKAN DILAYANI.'}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
         </section>
       )}
 
@@ -1730,7 +1769,12 @@ function CustomerHome() {
       </section>
 
       {/* Galeri Kegiatan Infinity Carousel: Tepat di bawah section "Masalah listrik, kami urus." */}
-      <ActivityGalleryCarousel onSelectPhoto={(idx) => setActiveGalleryIndex(idx)} />
+      {cms?.gallery?.enabled !== false && (
+        <ActivityGalleryCarousel
+          galleryCms={cms?.gallery}
+          onSelectPhoto={(idx) => setActiveGalleryIndex(idx)}
+        />
+      )}
 
       {cms?.assurance?.enabled !== false && (
         <section id="aman" className="customer-assurance">
@@ -1817,81 +1861,85 @@ function CustomerHome() {
         />
       )}
 
-      {activeGalleryIndex !== null && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 sm:p-5 backdrop-blur-xs animate-in fade-in duration-150"
-          onClick={() => setActiveGalleryIndex(null)}
-          data-testid="modal-gallery-lightbox"
-        >
+      {activeGalleryIndex !== null && (() => {
+        const galleryItems = cms?.gallery?.items && cms.gallery.items.length > 0 ? cms.gallery.items : CUSTOMER_GALLERY_IMAGES;
+        const currentItem = galleryItems[activeGalleryIndex] || galleryItems[0];
+        return (
           <div
-            className="relative max-h-[92vh] max-w-3xl w-full rounded-2xl bg-card border border-border overflow-hidden shadow-2xl flex flex-col"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-3 sm:p-5 backdrop-blur-xs animate-in fade-in duration-150"
+            onClick={() => setActiveGalleryIndex(null)}
+            data-testid="modal-gallery-lightbox"
           >
-            <div className="flex items-center justify-between border-b border-border px-4 py-3 bg-muted/30">
-              <div className="min-w-0 pr-2">
-                <div className="text-[10px] font-mono uppercase tracking-wider text-primary font-bold">
-                  Dokumentasi Lapangan {activeGalleryIndex + 1} / {CUSTOMER_GALLERY_IMAGES.length}
+            <div
+              className="relative max-h-[92vh] max-w-3xl w-full rounded-2xl bg-card border border-border overflow-hidden shadow-2xl flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-border px-4 py-3 bg-muted/30">
+                <div className="min-w-0 pr-2">
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-primary font-bold">
+                    Dokumentasi Lapangan {activeGalleryIndex + 1} / {galleryItems.length}
+                  </div>
+                  <h3 className="text-xs sm:text-sm font-bold text-foreground truncate mt-0.5">
+                    {currentItem.title}
+                  </h3>
                 </div>
-                <h3 className="text-xs sm:text-sm font-bold text-foreground truncate mt-0.5">
-                  {CUSTOMER_GALLERY_IMAGES[activeGalleryIndex].title}
-                </h3>
-              </div>
-              <button
-                type="button"
-                className="icon-button !size-8 shrink-0"
-                onClick={() => setActiveGalleryIndex(null)}
-                aria-label="Tutup"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="relative flex-1 bg-black/95 flex items-center justify-center min-h-[280px] max-h-[65vh] overflow-hidden p-2 select-none">
-              <img
-                src={CUSTOMER_GALLERY_IMAGES[activeGalleryIndex].src}
-                alt={CUSTOMER_GALLERY_IMAGES[activeGalleryIndex].title}
-                className="max-h-[62vh] max-w-full object-contain rounded-lg"
-              />
-
-              {activeGalleryIndex > 0 && (
                 <button
                   type="button"
-                  onClick={() => setActiveGalleryIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : prev))}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/60 hover:bg-black/80 text-white size-9 flex items-center justify-center text-sm shadow-md transition-all"
-                  aria-label="Foto sebelumnya"
-                >
-                  ◀
-                </button>
-              )}
-              {activeGalleryIndex < CUSTOMER_GALLERY_IMAGES.length - 1 && (
-                <button
-                  type="button"
-                  onClick={() => setActiveGalleryIndex((prev) => (prev !== null && prev < CUSTOMER_GALLERY_IMAGES.length - 1 ? prev + 1 : prev))}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/60 hover:bg-black/80 text-white size-9 flex items-center justify-center text-sm shadow-md transition-all"
-                  aria-label="Foto berikutnya"
-                >
-                  ▶
-                </button>
-              )}
-            </div>
-
-            <div className="border-t border-border p-3 sm:p-4 bg-card flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-              <p className="text-muted-foreground text-xs leading-relaxed">
-                {CUSTOMER_GALLERY_IMAGES[activeGalleryIndex].desc}
-              </p>
-              <div className="flex items-center justify-end gap-2 shrink-0">
-                <button
-                  type="button"
+                  className="icon-button !size-8 shrink-0"
                   onClick={() => setActiveGalleryIndex(null)}
-                  className="btn btn-outline !py-1.5 !px-3 text-xs"
+                  aria-label="Tutup"
                 >
-                  Tutup
+                  ✕
                 </button>
+              </div>
+
+              <div className="relative flex-1 bg-black/95 flex items-center justify-center min-h-[280px] max-h-[65vh] overflow-hidden p-2 select-none">
+                <img
+                  src={currentItem.src}
+                  alt={currentItem.title}
+                  className="max-h-[62vh] max-w-full object-contain rounded-lg"
+                />
+
+                {activeGalleryIndex > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveGalleryIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : prev))}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/60 hover:bg-black/80 text-white size-9 flex items-center justify-center text-sm shadow-md transition-all"
+                    aria-label="Foto sebelumnya"
+                  >
+                    ◀
+                  </button>
+                )}
+                {activeGalleryIndex < galleryItems.length - 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveGalleryIndex((prev) => (prev !== null && prev < galleryItems.length - 1 ? prev + 1 : prev))}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/60 hover:bg-black/80 text-white size-9 flex items-center justify-center text-sm shadow-md transition-all"
+                    aria-label="Foto berikutnya"
+                  >
+                    ▶
+                  </button>
+                )}
+              </div>
+
+              <div className="border-t border-border p-3 sm:p-4 bg-card flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <p className="text-muted-foreground text-xs leading-relaxed">
+                  {currentItem.desc}
+                </p>
+                <div className="flex items-center justify-end gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setActiveGalleryIndex(null)}
+                    className="btn btn-outline !py-1.5 !px-3 text-xs"
+                  >
+                    Tutup
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

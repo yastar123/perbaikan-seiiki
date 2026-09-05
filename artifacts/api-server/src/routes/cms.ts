@@ -43,6 +43,16 @@ async function getOrInitCms(): Promise<any> {
       }
     }
 
+    if (!existing.disclaimer) {
+      updatedData.disclaimer = DEFAULT_CMS_CONTENT.disclaimer;
+      hasChanges = true;
+    }
+
+    if (!existing.gallery) {
+      updatedData.gallery = DEFAULT_CMS_CONTENT.gallery;
+      hasChanges = true;
+    }
+
     if (hasChanges) {
       const [updated] = await db
         .update(landingCmsTable)
@@ -61,6 +71,8 @@ async function getOrInitCms(): Promise<any> {
       hero: DEFAULT_CMS_CONTENT.hero,
       assurance: DEFAULT_CMS_CONTENT.assurance,
       footer: DEFAULT_CMS_CONTENT.footer,
+      disclaimer: DEFAULT_CMS_CONTENT.disclaimer,
+      gallery: DEFAULT_CMS_CONTENT.gallery,
     })
     .returning();
   return created;
@@ -89,6 +101,8 @@ router.put("/cms", async (req, res): Promise<void> => {
     if (body.hero !== undefined) updatedData.hero = body.hero;
     if (body.assurance !== undefined) updatedData.assurance = body.assurance;
     if (body.footer !== undefined) updatedData.footer = body.footer;
+    if (body.disclaimer !== undefined) updatedData.disclaimer = body.disclaimer;
+    if (body.gallery !== undefined) updatedData.gallery = body.gallery;
 
     const [updated] = await db
       .update(landingCmsTable)
@@ -118,6 +132,8 @@ router.post("/cms/reset", async (_req, res): Promise<void> => {
         hero: DEFAULT_CMS_CONTENT.hero,
         assurance: DEFAULT_CMS_CONTENT.assurance,
         footer: DEFAULT_CMS_CONTENT.footer,
+        disclaimer: DEFAULT_CMS_CONTENT.disclaimer,
+        gallery: DEFAULT_CMS_CONTENT.gallery,
         updatedAt: new Date(),
       })
       .where(eq(landingCmsTable.id, current.id))

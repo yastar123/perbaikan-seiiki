@@ -291,6 +291,40 @@ export interface CmsFooter {
   whatsappContact: string;
 }
 
+export interface CmsDisclaimerStep {
+  step: string;
+  title: string;
+  example: string;
+}
+
+export interface CmsDisclaimer {
+  enabled: boolean;
+  eyebrow: string;
+  tagText: string;
+  title: string;
+  description: string;
+  steps: CmsDisclaimerStep[];
+  noticeText: string;
+}
+
+export interface CmsGalleryItem {
+  id: string | number;
+  src: string;
+  badge: string;
+  category: string;
+  title: string;
+  desc: string;
+}
+
+export interface CmsGallery {
+  enabled: boolean;
+  eyebrow: string;
+  tagText: string;
+  title: string;
+  description: string;
+  items: CmsGalleryItem[];
+}
+
 export interface CmsLandingContent {
   id?: number;
   navbar: CmsNavbar;
@@ -298,6 +332,8 @@ export interface CmsLandingContent {
   hero: CmsHero;
   assurance: CmsAssurance;
   footer: CmsFooter;
+  disclaimer?: CmsDisclaimer;
+  gallery?: CmsGallery;
   updatedAt?: Date | string;
 }
 
@@ -308,6 +344,8 @@ export const landingCmsTable = pgTable("landing_cms", {
   hero: jsonb("hero").$type<CmsHero>().notNull(),
   assurance: jsonb("assurance").$type<CmsAssurance>().notNull(),
   footer: jsonb("footer").$type<CmsFooter>().notNull(),
+  disclaimer: jsonb("disclaimer").$type<CmsDisclaimer>(),
+  gallery: jsonb("gallery").$type<CmsGallery>(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -365,6 +403,109 @@ export const DEFAULT_CMS_CONTENT: CmsLandingContent = {
       { id: "f2", label: "Masuk Dashboard Internal", href: "/login" },
     ],
     whatsappContact: "6281112345678",
+  },
+  disclaimer: {
+    enabled: true,
+    eyebrow: "Disclaimer Jangkauan Layanan",
+    tagText: "Penting",
+    title: "Wilayah di Luar Pilihan Input Tidak Akan Dilayani",
+    description: "Teknisi SEIIKI hanya dapat melayani kunjungan pada wilayah administratif yang terdaftar dan dapat dipilih secara lengkap bertahap pada formulir:",
+    steps: [
+      { step: "Langkah 1/4", title: "Provinsi", example: "Contoh: Lampung" },
+      { step: "Langkah 2/4", title: "Kabupaten / Kota", example: "Contoh: Bandar Lampung" },
+      { step: "Langkah 3/4", title: "Kecamatan", example: "Contoh: Langkapura" },
+      { step: "Langkah 4/4", title: "Kelurahan / Desa", example: "Pilih yang terdaftar" },
+    ],
+    noticeText: "Apabila lokasi/wilayah tempat tinggal Anda tidak tersedia atau tidak ada dalam opsi pilihan (Langkah 1 s/d 4), mohon maaf pesanan kunjungan TIDAK AKAN DILAYANI.",
+  },
+  gallery: {
+    enabled: true,
+    eyebrow: "Dokumentasi Kegiatan Nyata",
+    tagText: "10 Foto Lapangan",
+    title: "Galeri Kegiatan & Pekerjaan Teknisi",
+    description: "Dokumentasi pekerjaan langsung dari lokasi kunjungan pelanggan — dari instalasi panel, perbaikan jalur, hingga uji kelaikan operasi.",
+    items: [
+      {
+        id: "1",
+        src: "/galeri-1.jpeg",
+        badge: "01",
+        category: "Panel & Distribusi",
+        title: "Pemasangan & Pengkabelan Panel Listrik",
+        desc: "Pengkabelan rapi dan tertata sesuai standar teknis keselamatan ketenagalistrikan (PUIL).",
+      },
+      {
+        id: "2",
+        src: "/galeri-2.jpeg",
+        badge: "02",
+        category: "Proteksi Sirkit",
+        title: "Penyetelan & Penggantian MCB Utama",
+        desc: "Pemasangan sakelar pemutus otomatis berkualitas tinggi guna mencegah beban lebih dan lonjakan arus.",
+      },
+      {
+        id: "3",
+        src: "/galeri-3.jpeg",
+        badge: "03",
+        category: "Pemeriksaan Kabel",
+        title: "Inspeksi & Pemetaan Jalur Kabel Bangunan",
+        desc: "Pemeriksaan kelayakan isolasi jalur utama serta penataan rapian kabel di area plafon.",
+      },
+      {
+        id: "4",
+        src: "/galeri-4.jpeg",
+        badge: "04",
+        category: "Penanganan Darurat",
+        title: "Perbaikan Korsleting & Putus Arus",
+        desc: "Penanganan cepat tim tanggap darurat saat terjadi kebocoran arus dan percikan listrik.",
+      },
+      {
+        id: "5",
+        src: "/galeri-5.jpeg",
+        badge: "05",
+        category: "Pengukuran & Uji",
+        title: "Pengujian Grounding & Pembumian Instalasi",
+        desc: "Pengukuran resistansi pembumian menggunakan alat ukur khusus demi standar keamanan SLO.",
+      },
+      {
+        id: "6",
+        src: "/galeri-6.jpeg",
+        badge: "06",
+        category: "Sertifikasi NIDI & SLO",
+        title: "Supervisi & Pemeriksaan Kelaikan Operasi",
+        desc: "Pemeriksaan teknis menyeluruh sebagai syarat penerbitan NIDI dan Sertifikat Laik Operasi.",
+      },
+      {
+        id: "7",
+        src: "/galeri-7.jpeg",
+        badge: "07",
+        category: "Layanan Penerangan",
+        title: "Instalasi Titik Lampu & Armatur Komersial",
+        desc: "Pemasangan armatur penerangan ruangan dan outdoor berkekuatan tinggi secara presisi.",
+      },
+      {
+        id: "8",
+        src: "/galeri-8.jpeg",
+        badge: "08",
+        category: "Jaringan Distribusi",
+        title: "Pemeriksaan KWH Meter & Jalur Masuk PLN",
+        desc: "Koordinasi kelayakan sambungan instalasi pelanggan menuju terminal KWH meter PLN.",
+      },
+      {
+        id: "9",
+        src: "/galeri-9.jpeg",
+        badge: "09",
+        category: "Daya Besar & Industri",
+        title: "Perakitan Panel Tiga Fasa (3-Phase)",
+        desc: "Konfigurasi beban seimbang tiga fasa untuk kebutuhan gedung usaha dan peralatan industri.",
+      },
+      {
+        id: "10",
+        src: "/galeri-10.jpeg",
+        badge: "10",
+        category: "Perawatan Berkala",
+        title: "Perawatan & Cleaning Komponen Panel",
+        desc: "Pembersihan rutin debu dan kekencangan baut terminal kabel guna mencegah bahaya panas berlebih.",
+      },
+    ],
   },
 };
 
